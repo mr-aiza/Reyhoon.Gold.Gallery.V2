@@ -17,12 +17,12 @@
  *    عدد "Id" که برات می‌فرسته رو نگه دار.
  *
  * 3) یه KV namespace بساز:
- *      wrangler kv namespace create GALLERY_KV
+ *      wrangler kv namespace create SHOP_DB
  *    خروجیش رو توی wrangler.toml بذار (نمونه‌ش رو جدا فرستادم).
  *
  * 4) این دو تا secret رو ست کن:
  *      wrangler secret put BOT_TOKEN
- *      wrangler secret put ADMIN_CHAT_ID
+ *      wrangler secret put ADMIN_ID
  *
  * 5) دیپلوی کن:
  *      wrangler deploy
@@ -82,7 +82,7 @@ export default {
 
 // ---------- Public API ----------
 async function handleGetGallery(env) {
-  const raw = await env.GALLERY_KV.get("items");
+  const raw = await env.SHOP_DB.get("items");
   const items = raw ? JSON.parse(raw) : [];
   return new Response(JSON.stringify({ items }), {
     headers: { "Content-Type": "application/json", ...CORS_HEADERS },
@@ -96,7 +96,7 @@ async function handleTelegramWebhook(request, env) {
   if (!msg) return new Response("ok");
 
   const chatId = String(msg.chat.id);
-  if (chatId !== String(env.ADMIN_CHAT_ID)) {
+  if (chatId !== String(env.ADMIN_ID)) {
     // فقط ادمین اجازه‌ی مدیریت گالری رو داره
     return new Response("ok");
   }
@@ -148,7 +148,7 @@ async function handleNewItem(msg, env) {
   const photo = msg.photo[msg.photo.length - 1];
   const imageDataUrl = await downloadPhotoAsDataUrl(photo.file_id, env);
 
-  const raw = await env.GALLERY_KV.get("items");
+  const raw = await env.SHOP_DB.get("items");
   const items = raw ? JSON.parse(raw) : [];
   const nextId = await getNextId(env);
 
@@ -168,7 +168,7 @@ async function handleNewItem(msg, env) {
   };
 
   items.unshift(item);
-  await env.GALLERY_KV.put("items", JSON.stringify(items));
+  await env.SHOP_DB.put("items", JSON.stringify(items));
 
   await sendMessage(msg.chat.id,
     `✅ محصول «${item.name}» با آیدی ${item.id} اضافه شد.`, env);
@@ -189,9 +189,9 @@ function parseCaption(caption) {
 }
 
 async function getNextId(env) {
-  const current = await env.GALLERY_KV.get("next_id");
+  const current = await env.SHOP_DB.get("next_id");
   const next = current ? parseInt(current) + 1 : 1;
-  await env.GALLERY_KV.put("next_id", String(next));
+  await env.SHOP_DB.put("next_id", String(next));
   return next;
 }
 
@@ -221,7 +221,7 @@ function arrayBufferToBase64(buffer) {
 }
 
 async function handleList(chatId, env) {
-  const raw = await env.GALLERY_KV.get("items");
+  const raw = await env.SHOP_DB.get("items");
   const items = raw ? JSON.parse(raw) : [];
   if (items.length === 0) {
     await sendMessage(chatId, "گالری خالیه.", env);
@@ -240,11 +240,11 @@ async function handleDelete(text, chatId, env) {
     await sendMessage(chatId, "فرمت درست: /delete 7", env);
     return;
   }
-  const raw = await env.GALLERY_KV.get("items");
+  const raw = await env.SHOP_DB.get("items");
   let items = raw ? JSON.parse(raw) : [];
   const before = items.length;
   items = items.filter(it => it.id !== id);
-  await env.GALLERY_KV.put("items", JSON.stringify(items));
+  await env.SHOP_DB.put("items", JSON.stringify(items));
   await sendMessage(chatId,
     items.length < before ? `🗑️ محصول #${id} حذف شد.` : `محصولی با آیدی ${id} پیدا نشد.`, env);
 }
