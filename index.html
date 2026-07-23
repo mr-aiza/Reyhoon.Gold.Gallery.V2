@@ -1,0 +1,76 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>نمونه کارها - ریحون گلد گالری</title>
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+  <style>
+    :root{ --bg:#0C1611; --bg-card:#13201A; --bg-card-2:#182720; --border:#26362C; --gold:#C9A227; --cream:#E9E4D4; --green:#7A9471; }
+    body { background: var(--bg); color: var(--cream); font-family: Tahoma, sans-serif; margin: 0; padding: 20px; }
+    .product-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 15px; }
+    .product-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: 14px; overflow: hidden; }
+    .product-art { position: relative; aspect-ratio: 1/1; background: var(--bg-card-2); }
+    .product-art img { width: 100%; height: 100%; object-fit: cover; }
+    .product-badge { position: absolute; top: 8px; right: 8px; font-size: 10px; background: rgba(122,132,113,0.2); color: var(--green); padding: 2px 8px; border-radius: 999px; }
+    .product-info { padding: 12px; }
+    .product-name { font-size: 13px; font-weight: bold; margin: 0 0 5px 0; }
+    .product-price { font-size: 12px; color: var(--gold); margin-bottom: 10px; }
+    .add-btn { width: 100%; font-size: 12px; border: 1px solid rgba(201,168,76,0.4); color: var(--gold); border-radius: 8px; padding: 8px; background: none; cursor: pointer; transition: 0.2s; }
+    .add-btn:hover { background: var(--gold); color: var(--bg); }
+    #loading { text-align: center; margin-top: 50px; color: var(--gold); }
+  </style>
+</head>
+<body>
+
+  <div id="loading">در حال دریافت محصولات...</div>
+  <div class="product-grid" id="grid"></div>
+
+  <script>
+    const tg = window.Telegram.WebApp;
+    tg.expand();
+
+    async function loadProducts() {
+      try {
+        // آدرس ورکر شما اینجا قرار داده شده است
+        const workerUrl = "https://reyhoongoldgallery.tempmail41245.workers.dev";
+        const response = await fetch(`${workerUrl}/api/products`);
+        const products = await response.json();
+
+        document.getElementById('loading').style.display = 'none';
+        const grid = document.getElementById('grid');
+
+        if(products.length === 0) {
+            grid.innerHTML = '<div style="grid-column: span 2; text-align: center;">هنوز نمونه کاری اضافه نشده است.</div>';
+            return;
+        }
+
+        products.forEach(item => {
+          const card = `
+            <div class="product-card">
+              <div class="product-art">
+                <div class="product-badge">موجود</div>
+                <img src="${item.image}" alt="${item.name}">
+              </div>
+              <div class="product-info">
+                <h3 class="product-name">${item.name}</h3>
+                <div class="product-price">${item.price} تومان</div>
+                <button class="add-btn" onclick="selectItem('${item.id}', '${item.name}')">انتخاب</button>
+              </div>
+            </div>
+          `;
+          grid.innerHTML += card;
+        });
+      } catch (error) {
+        document.getElementById('loading').innerText = "خطا در برقراری ارتباط با سرور!";
+      }
+    }
+
+    function selectItem(id, name) {
+      tg.sendData(JSON.stringify({ action: "select", id: id, name: name }));
+    }
+
+    loadProducts();
+  </script>
+</body>
+</html>
