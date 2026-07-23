@@ -1,0 +1,14 @@
+name = "reyhoon-gallery"
+main = "reyhoon-gallery-worker.js"
+compatibility_date = "2024-01-01"
+
+# بعد از ساختن KV namespace با دستور:
+#   wrangler kv namespace create GALLERY_KV
+# مقدار id رو از خروجی همون دستور اینجا جایگزین کن
+[[kv_namespaces]]
+binding = "GALLERY_KV"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+
+# این دو تا رو با دستور زیر ست کن (توی خود فایل ننویس، امن نیست):
+#   wrangler secret put BOT_TOKEN
+#   wrangler secret put ADMIN_CHAT_ID
