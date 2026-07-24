@@ -15,54 +15,8 @@
 </head>
 <body>
 
-<!-- ===== Ticker ===== -->
-<div class="ticker-wrap"><div class="ticker-track" id="tickerTrack"></div></div>
-
-<!-- ===== Header ===== -->
-<header>
-  <div class="container">
-    <div class="brand" style="display:flex;align-items:center;gap:12px;">
-      <button class="menu-toggle icon-btn" id="menuToggle" aria-label="باز کردن منو">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-      </button>
-      <div class="brand">
-        <div class="brand-mark">🏆</div>
-        <span class="brand-name">ریحون گلد گالری</span>
-      </div>
-    </div>
-
-    <nav class="main-nav">
-      <a href="#shop">پرفروش‌ها</a>
-      <a href="shop.html">همه محصولات</a>
-      <a href="#calculator">محاسبه قیمت</a>
-      <a href="#trust">چرا ما</a>
-      <a href="#contact">تماس</a>
-    </nav>
-
-    <div class="header-actions">
-      <button class="icon-btn cart-btn" id="cartBtn" aria-label="سبد خرید">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
-        <span class="cart-badge num" id="cartBadge" style="display:none;">0</span>
-      </button>
-    </div>
-  </div>
-</header>
-
-<!-- ===== Mobile menu ===== -->
-<div class="mobile-menu" id="mobileMenu">
-  <div class="mobile-menu-head">
-    <button class="icon-btn" id="mobileMenuClose" aria-label="بستن منو">
-      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
-    </button>
-  </div>
-  <nav>
-    <a href="#shop" class="mobile-link">پرفروش‌ها</a>
-    <a href="shop.html" class="mobile-link">همه محصولات</a>
-    <a href="#calculator" class="mobile-link">محاسبه قیمت</a>
-    <a href="#trust" class="mobile-link">چرا ما</a>
-    <a href="#contact" class="mobile-link">تماس</a>
-  </nav>
-</div>
+<!-- ===== Site Header (رندر می‌شه توسط assets/app.js) ===== -->
+<div id="siteHeaderRoot"></div>
 
 <!-- ===== Hero ===== -->
 <section class="hero">
