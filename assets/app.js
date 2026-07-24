@@ -43,6 +43,10 @@
           </div>
           <nav class="main-nav">${navHTML}</nav>
           <div class="header-actions">
+            <a href="account.html" class="icon-btn account-btn" id="accountBtn" aria-label="حساب کاربری">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21a8 8 0 0 0-16 0"/><circle cx="12" cy="7" r="4"/></svg>
+              <span class="account-label" id="accountLabel">ورود</span>
+            </a>
             <button class="icon-btn cart-btn" id="cartBtn" aria-label="سبد خرید">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
               <span class="cart-badge num" id="cartBadge" style="display:none;">0</span>
@@ -58,6 +62,20 @@
         </div>
         <nav>${mobileNavHTML}</nav>
       </div>`;
+
+    updateAccountLabel();
+  }
+
+  // متن دکمه‌ی حساب کاربری رو بر اساس وضعیت لاگین (از assets/auth.js) به‌روز می‌کنه
+  function updateAccountLabel(){
+    const label = document.getElementById("accountLabel");
+    if(!label) return;
+    if(window.ReyhoonAuth && window.ReyhoonAuth.isLoggedIn()){
+      const user = window.ReyhoonAuth.getUser();
+      label.textContent = (user && user.name) ? user.name.split(" ")[0] : "حساب من";
+    } else {
+      label.textContent = "ورود";
+    }
   }
 
   renderHeader();
@@ -738,6 +756,11 @@
   function openCheckout(){
     if(cart.length === 0 || !checkoutModal) return;
     document.getElementById("checkoutTotal").textContent = toToman(cartTotal()) + " تومان";
+    if(window.ReyhoonAuth && window.ReyhoonAuth.isLoggedIn()){
+      const user = window.ReyhoonAuth.getUser();
+      const phoneInput = document.getElementById("ckPhone");
+      if(phoneInput && !phoneInput.value && user && user.phone) phoneInput.value = user.phone;
+    }
     stepForm.style.display = "block";
     stepSuccess.style.display = "none";
     checkoutModal.classList.add("open");
@@ -805,9 +828,13 @@ ${lines}
       let ticketNumber = null;
       if(ORDERS_API_URL){
         try{
+          const headers = { "Content-Type": "application/json" };
+          if(window.ReyhoonAuth && window.ReyhoonAuth.getToken()){
+            headers["Authorization"] = "Bearer " + window.ReyhoonAuth.getToken();
+          }
           const res = await fetch(`${ORDERS_API_URL}/api/order`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers,
             body: JSON.stringify({ name, phone, address, items: orderItems, total: cartTotal() }),
           });
           if(res.ok){

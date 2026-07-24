@@ -95,6 +95,9 @@ nav.main-nav a:hover, nav.main-nav a.active{ color:var(--gold); }
 .icon-btn{ color:#C8C2B4; display:flex; transition:color .2s; }
 .icon-btn:hover{ color:var(--gold); }
 .cart-btn{ position:relative; }
+.account-btn{ align-items:center; gap:6px; text-decoration:none; }
+.account-label{ font-size:13px; white-space:nowrap; max-width:80px; overflow:hidden; text-overflow:ellipsis; }
+@media (max-width:640px){ .account-label{ display:none; } }
 .cart-badge{
   position:absolute; top:-8px; left:-8px;
   background:var(--gold); color:var(--bg);
