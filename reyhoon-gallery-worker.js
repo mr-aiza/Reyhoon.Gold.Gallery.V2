@@ -429,13 +429,53 @@ async function handleAdminMessage(msg, chatId, env) {
 }
 
 async function handlePendingState(state, msg, chatId, env) {
-  // مرحله عکس: تنها استثنایی که پیام متنی نیست
+  // مرحله عکس: تنها استثنایی که پیام متنی نیست. می‌تونه چند عکس پشت‌سرهم بگیره.
   if (state === "new_photo") {
     if (!msg.photo) {
       await sendMessage(chatId, "لطفاً یه عکس بفرست، یا /start رو بزن برای انصراف.", env);
       return true;
     }
-    await goToPreview(msg, chatId, env);
+    const photo = msg.photo[msg.photo.length - 1];
+    const draft = await saveDraft(chatId, {}, env);
+    const photoFileIds = draft.photoFileIds || [];
+    photoFileIds.push(photo.file_id);
+    await saveDraft(chatId, { photoFileIds }, env);
+    await sendMessage(
+      chatId,
+      "عکس " + photoFileIds.length + " ذخیره شد ✅\nمیخوای عکس دیگه‌ای هم برای این محصول اضافه کنی؟ (بفرست) یا ادامه بدیم؟",
+      env,
+      [[{ text: "✅ همینا کافیه، ادامه بده", callback_data: "newphoto_done" }]]
+    );
+    return true;
+  }
+
+  // افزودن عکس به یک محصول موجود (از منوی ویرایش)
+  if (state.startsWith("addimg:")) {
+    const id = parseInt(state.split(":")[1], 10);
+    if (!msg.photo) {
+      await sendMessage(chatId, "لطفاً یه عکس بفرست، یا دکمه پایین رو بزن.", env, [[{ text: "✅ تمام، بازگشت", callback_data: "edit:" + id }]]);
+      return true;
+    }
+    const items = await getItems(env);
+    const item = items.find((it) => it.id === id);
+    if (!item) {
+      await env.SHOP_DB.delete("state:" + chatId);
+      await sendMessage(chatId, "محصول پیدا نشد.", env, [[{ text: "🏠 منو", callback_data: "menu" }]]);
+      return true;
+    }
+    const photo = msg.photo[msg.photo.length - 1];
+    const dataUrl = await downloadPhotoAsDataUrl(photo.file_id, env);
+    const images = getItemImages(item);
+    images.push(dataUrl);
+    item.images = images;
+    item.image = images[0];
+    await saveItems(items, env);
+    await sendMessage(
+      chatId,
+      "عکس افزوده شد ✅ (اکنون " + images.length + " عکس)\nمیخوای عکس دیگه‌ای هم بفرستی؟",
+      env,
+      [[{ text: "✅ تمام، بازگشت", callback_data: "edit:" + id }]]
+    );
     return true;
   }
 
@@ -618,14 +658,13 @@ function draftSummaryText(draft) {
     "موجودی: " + draft.stock + " عدد\n" +
     "اجرت: " + feeTxt + "\n" +
     "برچسب: " + (draft.badge || "—") + "\n" +
-    "نمایش در صفحه اصلی: " + (draft.featured ? "بله ✅" : "خیر") + "\n\n" +
+    "نمایش در صفحه اصلی: " + (draft.featured ? "بله ✅" : "خیر") + "\n" +
+    "عکس‌ها: " + ((draft.photoFileIds && draft.photoFileIds.length) || 0) + " عکس\n\n" +
     "همه چیز درسته؟"
   );
 }
 
-async function goToPreview(msg, chatId, env) {
-  const photo = msg.photo[msg.photo.length - 1];
-  await saveDraft(chatId, { photoFileId: photo.file_id }, env);
+async function goToPreview(chatId, env) {
   const draft = await getDraft(chatId, env);
   await env.SHOP_DB.put("state:" + chatId, "new_confirm");
   await sendMessage(chatId, draftSummaryText(draft), env, [
@@ -636,7 +675,11 @@ async function goToPreview(msg, chatId, env) {
 
 async function finalizeNewItem(chatId, env) {
   const draft = await getDraft(chatId, env);
-  const imageDataUrl = await downloadPhotoAsDataUrl(draft.photoFileId, env);
+  const photoFileIds = draft.photoFileIds && draft.photoFileIds.length ? draft.photoFileIds : (draft.photoFileId ? [draft.photoFileId] : []);
+  const images = [];
+  for (const fileId of photoFileIds) {
+    images.push(await downloadPhotoAsDataUrl(fileId, env));
+  }
 
   const items = await getItems(env);
   const settings = await getSettings(env);
@@ -657,7 +700,8 @@ async function finalizeNewItem(chatId, env) {
     badge: draft.badge || null,
     featured: !!draft.featured,
     rating: 4.7,
-    image: imageDataUrl,
+    images: images,
+    image: images[0] || null,
     createdAt: Date.now(),
   };
 
@@ -845,6 +889,50 @@ async function handleCallbackQuery(cq, env) {
 
   if (data === "newitem_confirm") {
     await finalizeNewItem(chatId, env);
+    return;
+  }
+
+  if (data === "newphoto_done") {
+    await goToPreview(chatId, env);
+    return;
+  }
+
+  if (data.startsWith("editimgs:")) {
+    const id = parseInt(data.split(":")[1]);
+    const items = await getItems(env);
+    const item = items.find((it) => it.id === id);
+    if (!item) {
+      await editMessage(chatId, messageId, "محصول پیدا نشد.", env, [[{ text: "« بازگشت به لیست", callback_data: "editmenu:0" }, { text: "🏠 منو", callback_data: "menu" }]]);
+      return;
+    }
+    const count = getItemImages(item).length;
+    await editMessage(chatId, messageId, "محصول #" + id + " — در حال حاضر " + count + " عکس داره.\n\nچیکار کنیم؟", env, editImagesKeyboard(id));
+    return;
+  }
+
+  if (data.startsWith("addimg:")) {
+    const id = parseInt(data.split(":")[1]);
+    await env.SHOP_DB.put("state:" + chatId, "addimg:" + id);
+    await editMessage(chatId, messageId, "عکس(های) جدید رو بفرست. هر چند تا خواستی، یکی‌یکی. وقتی تموم شد دکمه پایین رو بزن.", env, [[{ text: "✅ تمام، بازگشت", callback_data: "edit:" + id }]]);
+    return;
+  }
+
+  if (data.startsWith("delimg:")) {
+    const id = parseInt(data.split(":")[1]);
+    const items = await getItems(env);
+    const item = items.find((it) => it.id === id);
+    if (!item) {
+      await editMessage(chatId, messageId, "محصول پیدا نشد.", env, [[{ text: "« بازگشت به لیست", callback_data: "editmenu:0" }, { text: "🏠 منو", callback_data: "menu" }]]);
+      return;
+    }
+    const images = getItemImages(item);
+    if (images.length > 1) {
+      images.pop();
+      item.images = images;
+      item.image = images[0];
+      await saveItems(items, env);
+    }
+    await editMessage(chatId, messageId, "الان " + images.length + " عکس داره.\n\nچیکار کنیم؟", env, editImagesKeyboard(id));
     return;
   }
 
@@ -1040,6 +1128,7 @@ async function handleNewItem(msg, env) {
     badge: fields.badge || null,
     featured: featuredVal,
     rating: 4.7,
+    images: [imageDataUrl],
     image: imageDataUrl,
     createdAt: Date.now(),
   };
@@ -1062,6 +1151,12 @@ function parseCaption(caption) {
     if (mapped) fields[mapped] = val;
   });
   return fields;
+}
+
+function getItemImages(item) {
+  if (Array.isArray(item.images) && item.images.length) return item.images.slice();
+  if (item.image) return [item.image];
+  return [];
 }
 
 async function getNextId(env) {
@@ -1115,18 +1210,30 @@ function formatItemDetail(it) {
     "موجودی: " + stockTxt + "\n" +
     "اجرت: " + it.makingFee + "٪\n" +
     "برچسب: " + (it.badge || "—") + "\n" +
-    "نمایش در صفحه اصلی: " + (it.featured ? "بله ✅" : "خیر")
+    "نمایش در صفحه اصلی: " + (it.featured ? "بله ✅" : "خیر") + "\n" +
+    "عکس‌ها: " + getItemImages(it).length + " عکس"
   );
 }
 
-function editFieldsKeyboard(id) {
+function editFieldsKeyboard(item) {
+  const id = item.id;
+  const imgCount = getItemImages(item).length;
   return [
     [{ text: "نام", callback_data: "editf:" + id + ":name" }, { text: "دسته", callback_data: "editf:" + id + ":category" }],
     [{ text: "مدل", callback_data: "editf:" + id + ":model" }, { text: "عیار", callback_data: "editf:" + id + ":karat" }],
     [{ text: "وزن", callback_data: "editf:" + id + ":weight" }, { text: "موجودی", callback_data: "editf:" + id + ":stock" }],
     [{ text: "اجرت", callback_data: "editf:" + id + ":fee" }, { text: "برچسب", callback_data: "editf:" + id + ":badge" }],
     [{ text: "نمایش در صفحه اصلی", callback_data: "editf:" + id + ":featured" }],
+    [{ text: "🖼 عکس‌ها (" + imgCount + ")", callback_data: "editimgs:" + id }],
     [{ text: "« بازگشت به لیست", callback_data: "editmenu:0" }, { text: "🏠 منو", callback_data: "menu" }],
+  ];
+}
+
+function editImagesKeyboard(id) {
+  return [
+    [{ text: "➕ افزودن عکس", callback_data: "addimg:" + id }],
+    [{ text: "🗑 حذف آخرین عکس", callback_data: "delimg:" + id }],
+    [{ text: "« بازگشت", callback_data: "edit:" + id }],
   ];
 }
 
@@ -1168,7 +1275,7 @@ async function showEditFieldMenu(chatId, messageId, env, id) {
     await editMessage(chatId, messageId, "محصول پیدا نشد.", env, [[{ text: "« بازگشت به لیست", callback_data: "editmenu:0" }, { text: "🏠 منو", callback_data: "menu" }]]);
     return;
   }
-  await editMessage(chatId, messageId, formatItemDetail(item) + "\n\nکدوم مورد رو ویرایش کنم؟", env, editFieldsKeyboard(id));
+  await editMessage(chatId, messageId, formatItemDetail(item) + "\n\nکدوم مورد رو ویرایش کنم؟", env, editFieldsKeyboard(item));
 }
 
 async function updateItemField(env, id, field, value) {
@@ -1214,7 +1321,7 @@ async function handleEditValueInput(state, msg, chatId, env) {
     await sendMessage(chatId, "محصول پیدا نشد.", env, [[{ text: "🏠 منو", callback_data: "menu" }]]);
     return true;
   }
-  await sendMessage(chatId, "به‌روزرسانی شد ✅\n\n" + formatItemDetail(item), env, editFieldsKeyboard(id));
+  await sendMessage(chatId, "به‌روزرسانی شد ✅\n\n" + formatItemDetail(item), env, editFieldsKeyboard(item));
   return true;
 }
 
