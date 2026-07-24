@@ -28,6 +28,8 @@
 
   // آدرس Worker گالری تلگرام رو اینجا بذار
   const GALLERY_API_URL = "https://reyhoongoldgallery.tempmail41245.workers.dev";
+  // آدرس Worker تیکت سفارش‌ها رو بعد از دیپلوی اینجا بذار
+  const ORDERS_API_URL = "";
 
   async function fetchGallery(){
     if(!GALLERY_API_URL) return;
@@ -486,22 +488,29 @@
     empty.style.display = "none";
     footer.style.display = "block";
 
-    list.innerHTML = (undoWrap ? undoWrap.outerHTML : "") + cart.map((l, i) => `
+    list.innerHTML = (undoWrap ? undoWrap.outerHTML : "") + cart.map((l, i) => {
+      const base = karatBaseRate(l.product.karat) * l.product.weight;
+      const fee = base * (l.product.makingFee/100);
+      return `
       <div class="cart-item" data-idx="${i}">
         <div class="thumb">${productVisual(l.product)}</div>
         <div class="info">
           <div class="n">${l.product.name}</div>
-          <div class="p num">${toToman(productPrice(l.product))} تومان</div>
+          <div class="meta">${karatLabel(l.product.karat)} · ${l.product.weight} گرم</div>
+          <div class="meta">طلا: ${toToman(base)} + اجرت: ${toToman(fee)}</div>
+          <div class="p num">${toToman(productPrice(l.product))} تومان <span class="unit">/ عدد</span></div>
           <div class="qty-stepper">
             <button data-qty-minus="${i}" aria-label="کم کردن تعداد">−</button>
             <span class="q num">${l.qty}</span>
             <button data-qty-plus="${i}" aria-label="زیاد کردن تعداد">+</button>
           </div>
+          <div class="line-total num">جمع: ${toToman(productPrice(l.product) * l.qty)} تومان</div>
         </div>
         <button class="remove" data-remove="${i}" aria-label="حذف">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
         </button>
-      </div>`).join("");
+      </div>`;
+    }).join("");
 
     list.querySelectorAll("[data-remove]").forEach(btn => {
       btn.addEventListener("click", () => removeFromCart(parseInt(btn.getAttribute("data-remove"))));
@@ -598,7 +607,7 @@
 
   const checkoutSubmit = document.getElementById("checkoutSubmit");
   if(checkoutSubmit){
-    checkoutSubmit.addEventListener("click", () => {
+    checkoutSubmit.addEventListener("click", async () => {
       const name = document.getElementById("ckName").value.trim();
       const phone = document.getElementById("ckPhone").value.trim();
       const address = document.getElementById("ckAddress").value.trim();
@@ -608,7 +617,15 @@
       const addressOk = validateField("fieldAddress", address.length >= 5);
       if(!nameOk || !phoneOk || !addressOk) return;
 
-      const lines = cart.map(l => `- ${l.product.name} × ${l.qty} — ${toToman(productPrice(l.product)*l.qty)} تومان`).join("\n");
+      const orderItems = cart.map(l => ({
+        name: l.product.name,
+        karat: l.product.karat,
+        weight: l.product.weight,
+        qty: l.qty,
+        unitPrice: productPrice(l.product),
+      }));
+
+      const lines = cart.map(l => `- ${l.product.name} (${karatLabel(l.product.karat)}، ${l.product.weight} گرم) × ${l.qty} — ${toToman(productPrice(l.product)*l.qty)} تومان`).join("\n");
       const message =
 `سفارش جدید از ریحون گلد گالری
 نام: ${name}
@@ -622,6 +639,44 @@ ${lines}
 
       const tgLink = `https://t.me/${SHOP_TELEGRAM_USERNAME}?text=${encodeURIComponent(message)}`;
       document.getElementById("checkoutTelegramLink").href = tgLink;
+
+      checkoutSubmit.disabled = true;
+      checkoutSubmit.textContent = "در حال ثبت سفارش...";
+
+      let ticketNumber = null;
+      if(ORDERS_API_URL){
+        try{
+          const res = await fetch(`${ORDERS_API_URL}/api/order`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ name, phone, address, items: orderItems, total: cartTotal() }),
+          });
+          if(res.ok){
+            const data = await res.json();
+            if(data.ok && data.ticketNumber) ticketNumber = data.ticketNumber;
+          }
+        } catch(err){
+          console.warn("ارسال خودکار تیکت ناموفق بود:", err.message);
+        }
+      }
+
+      checkoutSubmit.disabled = false;
+      checkoutSubmit.textContent = "ثبت سفارش و ارسال به تلگرام";
+
+      const ticketDisplay = document.getElementById("ticketNumberDisplay");
+      const tgLinkEl = document.getElementById("checkoutTelegramLink");
+      const successDesc = document.getElementById("checkoutSuccessDesc");
+
+      if(ticketNumber){
+        ticketDisplay.style.display = "block";
+        ticketDisplay.textContent = "شماره پیگیری تیکت: #" + ticketNumber;
+        tgLinkEl.style.display = "none";
+        successDesc.textContent = "تیکت سفارش شما مستقیم برای ما ارسال شد. برای پیگیری همین شماره تیکت رو نگه دارید.";
+      } else {
+        ticketDisplay.style.display = "none";
+        tgLinkEl.style.display = "block";
+        successDesc.textContent = "برای تکمیل سفارش، روی دکمه زیر بزنید تا خلاصه سفارش به تلگرام ما ارسال بشه.";
+      }
 
       stepForm.style.display = "none";
       stepSuccess.style.display = "block";

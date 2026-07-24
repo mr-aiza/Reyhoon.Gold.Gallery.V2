@@ -276,11 +276,14 @@ footer{ border-top:1px solid var(--border); margin-top:40px; }
 @keyframes item-in{ from{ opacity:0; transform:translateY(-6px); } to{ opacity:1; transform:translateY(0); } }
 .cart-item.removing{ animation:item-out .18s ease forwards; }
 @keyframes item-out{ to{ opacity:0; transform:translateX(12px); max-height:0; padding:0; margin:0; } }
-.cart-item .thumb{ width:48px; height:48px; background:var(--bg); border-radius:var(--radius-sm); padding:8px; flex-shrink:0; overflow:hidden; }
+.cart-item .thumb{ width:80px; height:80px; background:var(--bg); border-radius:var(--radius-sm); padding:8px; flex-shrink:0; overflow:hidden; border:1px solid var(--border); }
 .cart-item .thumb img{ width:100%; height:100%; object-fit:cover; border-radius:6px; }
 .cart-item .info{ flex:1; }
-.cart-item .info .n{ font-size:13px; }
-.cart-item .info .p{ font-size:12px; color:var(--gold); }
+.cart-item .info .n{ font-size:13px; font-weight:600; }
+.cart-item .info .meta{ font-size:11px; color:var(--text-dim); margin-top:2px; }
+.cart-item .info .p{ font-size:12px; color:var(--gold); margin-top:4px; }
+.cart-item .info .p .unit{ color:var(--text-faint); font-size:10px; }
+.cart-item .info .line-total{ font-size:11px; color:var(--text-dim); margin-top:4px; }
 .cart-item .remove{ color:var(--text-dim); transition:color .2s; }
 .cart-item .remove:hover{ color:var(--red-light); }
 .qty-stepper{ display:flex; align-items:center; gap:var(--sp-2); margin-top:6px; }
@@ -352,6 +355,13 @@ footer{ border-top:1px solid var(--border); margin-top:40px; }
 .checkout-success svg{ margin:0 auto 16px; color:var(--green-light); }
 .checkout-success h3{ font-size:16px; margin-bottom:var(--sp-2); }
 .checkout-success p{ font-size:13px; color:var(--text-dim); line-height:1.9; margin-bottom:var(--sp-5); }
+#ticketNumberDisplay{
+  background:linear-gradient(135deg,#E9E4D4 0%, #C9A227 50%, #8C6F1B 100%);
+  -webkit-background-clip:text; background-clip:text; color:transparent;
+  font-size:20px; font-weight:700; margin-bottom:var(--sp-5);
+  border:1px solid var(--border); border-radius:var(--radius-md); padding:12px;
+  -webkit-text-fill-color:transparent;
+}
 
 /* ===== Live indicator ===== */
 .live-dot{ display:inline-block; width:6px; height:6px; border-radius:50%; background:var(--green-light); margin-left:6px; animation: pulse-dot 1.6s ease-in-out infinite; }
