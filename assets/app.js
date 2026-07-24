@@ -53,6 +53,9 @@
   let lastRemoved = null; // { line, index }
 
   const toToman = n => Math.round(n).toLocaleString("fa-IR");
+  let priceReady = false;
+  let previousLivePrice = null;
+  const priceText = n => priceReady ? toToman(n) : "...";
   const price24kVal = () => usingLiveData && live24k ? live24k : pricePerGram*1.33;
   const priceEmamiVal = () => usingLiveData && liveEmami ? liveEmami : pricePerGram*8.13;
 
@@ -73,14 +76,18 @@
       if(item18k && item18k.price){
         const newPrice = Number(item18k.price);
         if(!isNaN(newPrice) && newPrice > 0){
+          const delta = previousLivePrice !== null ? newPrice - previousLivePrice : null;
+          previousLivePrice = newPrice;
           pricePerGram = newPrice;
           live24k = item24k ? Number(item24k.price) : null;
           liveEmami = itemEmami ? Number(itemEmami.price) : null;
           history.shift();
           history.push(pricePerGram);
           usingLiveData = true;
+          priceReady = true;
           updateLiveIndicator();
           refreshAllUI();
+          updatePriceChangeBadge(delta);
           return;
         }
       }
@@ -102,13 +109,31 @@
     label.textContent = usingLiveData ? "قیمت زنده" : "در حال دریافت قیمت...";
   }
 
-  function refreshAllUI(){
+  function updatePriceChangeBadge(delta){
+    const changeEl = document.getElementById("priceChange");
+    const changeVal = document.getElementById("changeVal");
+    if(!changeEl || !changeVal) return;
+    if(delta === null){
+      changeEl.style.display = "none";
+      return;
+    }
+    const positive = delta >= 0;
+    changeEl.style.display = "";
+    changeEl.className = "price-change num " + (positive ? "up" : "down");
+    changeVal.textContent = (positive ? "+" : "") + toToman(delta);
+  }
+
+  function renderMainPrices(){
     const mp = document.getElementById("mainPrice");
-    if(mp) mp.textContent = toToman(pricePerGram);
+    if(mp) mp.textContent = priceText(pricePerGram);
     const p24 = document.getElementById("price24");
-    if(p24) p24.textContent = toToman(price24kVal());
+    if(p24) p24.textContent = priceText(price24kVal());
     const pc = document.getElementById("priceCoin");
-    if(pc) pc.textContent = toToman(priceEmamiVal());
+    if(pc) pc.textContent = priceText(priceEmamiVal());
+  }
+
+  function refreshAllUI(){
+    renderMainPrices();
     renderSparkline();
     renderTicker();
     renderProducts();
@@ -150,7 +175,7 @@
       { label:"نیم سکه", val:pricePerGram*4.06 },
       { label:"ربع سکه", val:pricePerGram*2.03 },
     ];
-    let groupHTML = items.map(it => `<span class="ticker-item"><span>${it.label}</span><span class="val num">${toToman(it.val)}</span><span class="unit">تومان</span></span>`).join("");
+    let groupHTML = items.map(it => `<span class="ticker-item"><span>${it.label}</span><span class="val num">${priceText(it.val)}</span><span class="unit">تومان</span></span>`).join("");
     track.innerHTML = `<div class="ticker-group">${groupHTML}</div><div class="ticker-group">${groupHTML}</div>`;
   }
 
@@ -158,6 +183,7 @@
   function renderSparkline(){
     const svg = document.getElementById("sparkline");
     if(!svg) return;
+    if(!priceReady){ svg.innerHTML = ""; return; }
     const w = 300, h = 36;
     const min = Math.min(...history), max = Math.max(...history);
     const range = (max - min) || 1;
@@ -236,7 +262,7 @@
               <span class="dot">· ${p.weight} گرم</span>
               <span class="dot">· ${karatLabel(p.karat)}</span>
             </div>
-            <div class="product-price num">${toToman(productPrice(p))} تومان</div>
+            <div class="product-price num">${priceText(productPrice(p))} تومان</div>
             <button class="add-btn" data-add="${p.id}">افزودن به سبد</button>
           </div>
         </div>`;
@@ -300,7 +326,7 @@
     document.getElementById("lightboxName").textContent = p.name;
     document.getElementById("lightboxMeta").innerHTML =
       `<span class="star">★</span><span class="num">${p.rating}</span><span class="dot">· ${p.weight} گرم</span><span class="dot">· ${karatLabel(p.karat)}</span>`;
-    document.getElementById("lightboxPrice").textContent = toToman(productPrice(p)) + " تومان";
+    document.getElementById("lightboxPrice").textContent = priceText(productPrice(p)) + " تومان";
     document.getElementById("lightboxAdd").onclick = () => addToCart(p.id);
   }
 
@@ -361,9 +387,9 @@
     const total = rate * calcWeight * (1 + calcFee/100);
     const base = rate * calcWeight;
     const fee = base * (calcFee/100);
-    totalEl.textContent = toToman(total);
-    document.getElementById("calcBase").textContent = toToman(base) + " تومان";
-    document.getElementById("calcFee").textContent = toToman(fee) + " تومان";
+    totalEl.textContent = priceText(total);
+    document.getElementById("calcBase").textContent = priceText(base) + " تومان";
+    document.getElementById("calcFee").textContent = priceText(fee) + " تومان";
   }
 
   const calcKaratBtns = document.getElementById("calcKaratBtns");
@@ -669,6 +695,8 @@ ${lines}
   // ---------- Init ----------
   renderSkeleton();
   loadCart();
+  updatePriceChangeBadge(null);
+  renderMainPrices();
   renderTicker();
   renderSparkline();
   renderProducts();
