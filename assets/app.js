@@ -92,6 +92,7 @@
         PRODUCTS = data.items;
         galleryLoaded = true;
         galleryFailed = false;
+        if(typeof renderModelFilters === "function") renderModelFilters();
         renderProducts();
       }
     } catch(err){
@@ -263,11 +264,14 @@
   }
 
   // ---------- Products ----------
+  let activeModel = "همه";
+
   function matchesFilters(p){
     if(PAGE_MODE === "featured") return !!p.featured;
     const catOk = activeCategory === "همه" || p.category === activeCategory;
     const karatOk = activeKarat === "همه" || String(p.karat) === activeKarat;
-    return catOk && karatOk;
+    const modelOk = activeModel === "همه" || p.model === activeModel;
+    return catOk && karatOk && modelOk;
   }
 
   function visibleProducts(){ return PRODUCTS.filter(matchesFilters); }
@@ -434,12 +438,46 @@
 
   // ---------- Filters (فقط صفحه فروشگاه کامل) ----------
   const filtersEl = document.getElementById("filters");
+  const modelFiltersEl = document.getElementById("modelFilters");
+
+  function renderModelFilters(){
+    if(!modelFiltersEl) return;
+    activeModel = "همه";
+    if(activeCategory === "همه"){
+      modelFiltersEl.style.display = "none";
+      modelFiltersEl.innerHTML = "";
+      return;
+    }
+    const models = Array.from(new Set(
+      PRODUCTS.filter(p => p.category === activeCategory && p.model).map(p => p.model)
+    ));
+    if(models.length === 0){
+      modelFiltersEl.style.display = "none";
+      modelFiltersEl.innerHTML = "";
+      return;
+    }
+    modelFiltersEl.style.display = "";
+    modelFiltersEl.innerHTML =
+      `<button class="filter-btn active" data-model="همه">همه مدل‌ها</button>` +
+      models.map(m => `<button class="filter-btn" data-model="${m}">${m}</button>`).join("");
+  }
+
   if(filtersEl){
     filtersEl.addEventListener("click", (e) => {
       const btn = e.target.closest(".filter-btn");
       if(!btn) return;
       activeCategory = btn.getAttribute("data-cat");
       filtersEl.querySelectorAll(".filter-btn").forEach(b => b.classList.toggle("active", b === btn));
+      renderModelFilters();
+      renderProducts();
+    });
+  }
+  if(modelFiltersEl){
+    modelFiltersEl.addEventListener("click", (e) => {
+      const btn = e.target.closest(".filter-btn");
+      if(!btn) return;
+      activeModel = btn.getAttribute("data-model");
+      modelFiltersEl.querySelectorAll(".filter-btn").forEach(b => b.classList.toggle("active", b === btn));
       renderProducts();
     });
   }
