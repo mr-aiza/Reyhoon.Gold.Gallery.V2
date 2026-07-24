@@ -114,6 +114,7 @@
   let activeCategory = "همه";
   let activeKarat = "همه";
   let lightboxIndex = -1;
+  let lightboxImgIndex = 0;
   let live24k = null;
   let liveEmami = null;
   let undoTimer = null;
@@ -218,8 +219,18 @@
     return `<svg viewBox="0 0 120 120" width="100%" height="100%"><path d="M60 35 L60 60" fill="none" stroke="${stroke}" stroke-width="1.4"/><circle cx="60" cy="72" r="13" fill="none" stroke="${stroke}" stroke-width="1.4"/></svg>`;
   }
 
-  function productVisual(p){
-    if(p.image) return `<img src="${p.image}" alt="${p.name}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;">`;
+  function productImages(p){
+    if(Array.isArray(p.images) && p.images.length) return p.images;
+    if(p.image) return [p.image];
+    return null;
+  }
+
+  function productVisual(p, imgIndex){
+    const imgs = productImages(p);
+    if(imgs && imgs.length){
+      const idx = (typeof imgIndex === "number" && imgs[imgIndex]) ? imgIndex : 0;
+      return `<img src="${imgs[idx]}" alt="${p.name}" style="width:100%;height:100%;object-fit:cover;border-radius:8px;">`;
+    }
     return productArtSVG(p.art);
   }
 
@@ -395,6 +406,7 @@
     const list = visibleProducts().length ? visibleProducts() : PRODUCTS;
     lightboxIndex = list.findIndex(p => p.id === id);
     if(lightboxIndex === -1) return;
+    lightboxImgIndex = 0;
     renderLightbox(list);
     lightboxEl.classList.add("open");
   }
@@ -403,14 +415,42 @@
     list = list || (visibleProducts().length ? visibleProducts() : PRODUCTS);
     const p = list[lightboxIndex];
     if(!p) return;
-    const artEl = document.getElementById("lightboxArt");
-    artEl.querySelector("svg, img")?.remove();
-    artEl.insertAdjacentHTML("beforeend", productVisual(p));
+    renderLightboxImage(p);
     document.getElementById("lightboxName").textContent = p.name;
     document.getElementById("lightboxMeta").innerHTML =
       `<span class="star">★</span><span class="num">${p.rating}</span><span class="dot">· ${p.weight} گرم</span><span class="dot">· ${karatLabel(p.karat)}</span>`;
     document.getElementById("lightboxPrice").textContent = priceText(productPrice(p)) + " تومان";
     document.getElementById("lightboxAdd").onclick = () => addToCart(p.id);
+  }
+
+  // این تابع فقط تصویر + ردیف thumbnail رو رندر می‌کنه، بدون دست‌زدن به دکمه‌های
+  // بستن/قبلی/بعدی که کنارشون هستن. جایگزینی کامل innerHTML به‌جای querySelector
+  // تک‌المانی قبلی، باعث میشه هیچ تصویر اضافه‌ای از رندر قبلی باقی نمونه (رفع باگ).
+  function renderLightboxImage(p){
+    const wrap = document.getElementById("lightboxImgWrap");
+    if(wrap) wrap.innerHTML = productVisual(p, lightboxImgIndex);
+    renderLightboxThumbs(p);
+  }
+
+  function renderLightboxThumbs(p){
+    const thumbsEl = document.getElementById("lightboxThumbs");
+    if(!thumbsEl) return;
+    const imgs = productImages(p);
+    if(!imgs || imgs.length < 2){
+      thumbsEl.innerHTML = "";
+      thumbsEl.style.display = "none";
+      return;
+    }
+    thumbsEl.style.display = "flex";
+    thumbsEl.innerHTML = imgs.map((src, i) =>
+      `<div class="lightbox-thumb ${i === lightboxImgIndex ? 'active' : ''}" data-thumb="${i}"><img src="${src}" alt=""></div>`
+    ).join("");
+    thumbsEl.querySelectorAll("[data-thumb]").forEach(el => {
+      el.addEventListener("click", () => {
+        lightboxImgIndex = parseInt(el.dataset.thumb, 10);
+        renderLightboxImage(p);
+      });
+    });
   }
 
   function closeLightbox(){ lightboxEl && lightboxEl.classList.remove("open"); }
@@ -421,11 +461,13 @@
     document.getElementById("lightboxPrev").addEventListener("click", () => {
       const list = visibleProducts().length ? visibleProducts() : PRODUCTS;
       lightboxIndex = (lightboxIndex - 1 + list.length) % list.length;
+      lightboxImgIndex = 0;
       renderLightbox(list);
     });
     document.getElementById("lightboxNext").addEventListener("click", () => {
       const list = visibleProducts().length ? visibleProducts() : PRODUCTS;
       lightboxIndex = (lightboxIndex + 1) % list.length;
+      lightboxImgIndex = 0;
       renderLightbox(list);
     });
     document.addEventListener("keydown", (e) => {
