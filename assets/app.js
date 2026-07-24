@@ -5,6 +5,72 @@
 (function(){
   const PAGE_MODE = window.PAGE_MODE || "full"; // "featured" روی index، "full" روی shop
 
+  // ============================================================
+  // هدر مشترک — یک منبع واحد برای هدر که تو همه صفحات (index/shop) رندر می‌شه
+  // ============================================================
+  function buildNavLinks(){
+    const onShop = PAGE_MODE === "full";
+    const shopHref = "shop.html";
+    const anchor = (hash) => onShop ? `index.html${hash}` : hash;
+    return [
+      { href: anchor("#shop"), label: "پرفروش‌ها" },
+      { href: shopHref, label: "همه محصولات", active: onShop },
+      { href: anchor("#calculator"), label: "محاسبه قیمت" },
+      { href: anchor("#trust"), label: "چرا ما" },
+      { href: anchor("#contact"), label: "تماس" },
+    ];
+  }
+
+  function renderHeader(){
+    const root = document.getElementById("siteHeaderRoot");
+    if(!root) return;
+    const links = buildNavLinks();
+    const navHTML = links.map(l => `<a href="${l.href}"${l.active ? ' class="active"' : ''}>${l.label}</a>`).join("");
+    const mobileNavHTML = links.map(l => `<a href="${l.href}" class="mobile-link${l.active ? ' active' : ''}">${l.label}</a>`).join("");
+
+    root.innerHTML = `
+      <div class="ticker-wrap"><div class="ticker-track" id="tickerTrack"></div></div>
+      <header id="siteHeader">
+        <div class="container">
+          <div class="brand" style="display:flex;align-items:center;gap:12px;">
+            <button class="menu-toggle icon-btn" id="menuToggle" aria-label="باز کردن منو">
+              <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+            </button>
+            <a href="index.html" class="brand">
+              <div class="brand-mark">🏆</div>
+              <span class="brand-name">ریحون گلد گالری</span>
+            </a>
+          </div>
+          <nav class="main-nav">${navHTML}</nav>
+          <div class="header-actions">
+            <button class="icon-btn cart-btn" id="cartBtn" aria-label="سبد خرید">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4Z"/><path d="M3 6h18"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
+              <span class="cart-badge num" id="cartBadge" style="display:none;">0</span>
+            </button>
+          </div>
+        </div>
+      </header>
+      <div class="mobile-menu" id="mobileMenu">
+        <div class="mobile-menu-head">
+          <button class="icon-btn" id="mobileMenuClose" aria-label="بستن منو">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+          </button>
+        </div>
+        <nav>${mobileNavHTML}</nav>
+      </div>`;
+  }
+
+  renderHeader();
+
+  // سایه‌ی هدر موقع اسکرول — یه لایه‌ی بصری اضافه برای هدر «قوی‌تر»
+  (function initHeaderScrollShadow(){
+    const header = document.getElementById("siteHeader");
+    if(!header) return;
+    const onScroll = () => header.classList.toggle("scrolled", window.scrollY > 8);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive:true });
+  })();
+
   // ---------- Data ----------
   // محصولات فقط از گالری تلگرام (Cloudflare Worker) میان؛ دیتای نمایشی حذف شده.
   let PRODUCTS = [];
@@ -247,30 +313,38 @@
     grid.innerHTML = source.map(p => {
       const hiddenClass = matchesFilters(p) ? "" : "hidden";
       const badgeText = p.featured && PAGE_MODE === "full" && !p.badge ? "پرفروش" : p.badge;
+      const hasStockInfo = typeof p.stock === "number";
+      const outOfStock = hasStockInfo && p.stock <= 0;
+      const stockNote = hasStockInfo
+        ? (outOfStock ? `<div class="stock-note out">ناموجود</div>` : (p.stock <= 3 ? `<div class="stock-note low">تنها ${p.stock} عدد در انبار</div>` : ""))
+        : "";
       return `
         <div class="product-card ${hiddenClass}" data-id="${p.id}">
           <div class="product-art" data-open="${p.id}" style="cursor:zoom-in;">
             ${badgeText ? `<span class="product-badge ${p.featured ? 'featured' : ''}">${badgeText}</span>` : ""}
+            ${outOfStock ? `<span class="product-badge" style="background:#8B2E2E;color:#fff;">ناموجود</span>` : ""}
             ${productVisual(p)}
           </div>
           <div class="product-info">
-            <div class="product-name">${p.name}</div>
+            <div class="product-name">${p.name}${p.model ? ` <span class="dot">· ${p.model}</span>` : ""}</div>
             <div class="product-meta">
               <span class="star">★</span>
               <span class="num">${p.rating}</span>
               <span class="dot">· ${p.weight} گرم</span>
               <span class="dot">· ${karatLabel(p.karat)}</span>
             </div>
+            ${stockNote}
             <div class="product-price num">${priceText(productPrice(p))} تومان</div>
-            <button class="add-btn" data-add="${p.id}">افزودن به سبد</button>
+            <button class="add-btn" data-add="${p.id}" ${outOfStock ? "disabled" : ""}>${outOfStock ? "ناموجود" : "افزودن به سبد"}</button>
           </div>
         </div>`;
     }).join("");
 
-    grid.querySelectorAll("[data-add]").forEach(btn => {
+    grid.querySelectorAll("[data-add]:not([disabled])").forEach(btn => {
       btn.addEventListener("click", () => {
         const id = parseInt(btn.getAttribute("data-add"));
-        addToCart(id);
+        const added = addToCart(id);
+        if (!added) return;
         btn.textContent = "افزوده شد ✓";
         btn.classList.add("just-added");
         setTimeout(() => { btn.textContent = "افزودن به سبد"; btn.classList.remove("just-added"); }, 1200);
@@ -294,13 +368,19 @@
 
   function addToCart(id){
     const product = PRODUCTS.find(p => p.id === id);
-    if(!product) return;
+    if(!product) return false;
     const line = cart.find(l => l.product.id === id);
+    const currentQty = line ? line.qty : 0;
+    if(typeof product.stock === "number" && currentQty + 1 > product.stock){
+      alert(product.stock <= 0 ? "این محصول در حال حاضر ناموجود است." : `فقط ${product.stock} عدد از این محصول موجود است.`);
+      return false;
+    }
     if(line){ line.qty += 1; } else { cart.push({ product, qty:1 }); }
     renderCart();
     bumpCartBadge();
     const overlay = document.getElementById("cartOverlay");
     if(overlay) overlay.classList.add("open");
+    return true;
   }
 
   // ---------- Lightbox ----------
@@ -513,7 +593,16 @@
       });
     });
     list.querySelectorAll("[data-qty-plus]").forEach(btn => {
-      btn.addEventListener("click", () => { cart[parseInt(btn.getAttribute("data-qty-plus"))].qty += 1; renderCart(); });
+      btn.addEventListener("click", () => {
+        const idx = parseInt(btn.getAttribute("data-qty-plus"));
+        const l = cart[idx];
+        if(typeof l.product.stock === "number" && l.qty + 1 > l.product.stock){
+          alert(`فقط ${l.product.stock} عدد از این محصول موجود است.`);
+          return;
+        }
+        l.qty += 1;
+        renderCart();
+      });
     });
 
     document.getElementById("cartTotalVal").textContent = toToman(cartTotal()) + " تومان";
@@ -607,6 +696,7 @@
       if(!nameOk || !phoneOk || !addressOk) return;
 
       const orderItems = cart.map(l => ({
+        id: l.product.id,
         name: l.product.name,
         karat: l.product.karat,
         weight: l.product.weight,
