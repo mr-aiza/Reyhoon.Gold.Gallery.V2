@@ -54,6 +54,12 @@ export default {
 
     return new Response("Reyhoon Gold Gallery API - OK", { status: 200 });
   },
+
+  // این بخش رو Cloudflare خودکار صدا می‌زنه، فقط باید توی Settings → Triggers
+  // یه Cron Trigger اضافه کنی (مثلاً هر روز ساعت ۰۰:۰۰ → 0 0 * * *)
+  async scheduled(event, env, ctx) {
+    ctx.waitUntil(runBackup(env, "خودکار (زمان‌بندی‌شده)"));
+  },
 };
 
 // ============================================================
@@ -148,7 +154,9 @@ async function handleNewOrder(request, env) {
     "جمع کل: " + toToman(total) + " تومان";
 
   try {
-    await sendMessage(env.ADMIN_ID, message, env);
+    await sendMessage(env.ADMIN_ID, message, env, [
+      [{ text: "✅ تایید سفارش", callback_data: "apporder:" + ticketNumber }, { text: "❌ رد سفارش", callback_data: "rejorder:" + ticketNumber }],
+    ]);
   } catch (err) {
     // حتی اگه ارسال به تلگرام خطا بده، تیکت ذخیره شده و شماره‌ش برمی‌گرده
   }
@@ -172,6 +180,22 @@ async function decreaseStockForOrder(orderedItems, env) {
   if (changed) await saveItems(items, env);
 }
 
+async function increaseStockForOrder(orderedItems, env) {
+  const items = await getItems(env);
+  let changed = false;
+  for (const ordered of orderedItems) {
+    if (ordered.id == null) continue;
+    const match = items.find((it) => it.id === ordered.id);
+    if (!match) continue;
+    if (typeof match.stock === "number") {
+      const qty = Number(ordered.qty) || 0;
+      match.stock = match.stock + qty;
+      changed = true;
+    }
+  }
+  if (changed) await saveItems(items, env);
+}
+
 function toToman(n) {
   return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
 }
@@ -183,9 +207,101 @@ async function getNextTicket(env) {
   return next;
 }
 
+async function handleOrderDecision(data, chatId, messageId, env) {
+  const parts = data.split(":");
+  const approve = parts[0] === "apporder";
+  const ticketNumber = parseInt(parts[1]);
+
+  const raw = await env.SHOP_DB.get("order:" + ticketNumber);
+  if (!raw) {
+    await editMessage(chatId, messageId, "این تیکت پیدا نشد (شاید قبلاً حذف شده).", env);
+    return;
+  }
+  const order = JSON.parse(raw);
+
+  if (order.status !== "pending") {
+    await editMessage(chatId, messageId,
+      "این سفارش قبلاً " + (order.status === "approved" ? "تایید" : "رد") + " شده.", env);
+    return;
+  }
+
+  if (approve) {
+    order.status = "approved";
+    await env.SHOP_DB.put("order:" + ticketNumber, JSON.stringify(order));
+    await editMessage(chatId, messageId,
+      "✅ سفارش #" + ticketNumber + " تایید شد.\nموجودی انبار همون‌طوری که کم شده بود می‌مونه.", env);
+  } else {
+    order.status = "rejected";
+    await env.SHOP_DB.put("order:" + ticketNumber, JSON.stringify(order));
+    try {
+      await increaseStockForOrder(order.items, env);
+    } catch (err) {
+      // اگه برگردوندن موجودی خطا بده، وضعیت سفارش همچنان rejected ثبت می‌مونه
+    }
+    await editMessage(chatId, messageId,
+      "❌ سفارش #" + ticketNumber + " رد شد.\nموجودی اقلامش به انبار برگشت.", env);
+  }
+}
+
+
 // ============================================================
-//  Debug
+//  پشتیبان‌گیری (Backup)
 // ============================================================
+async function buildBackupPayload(env) {
+  const items = await getItems(env);
+  const settings = await getSettings(env);
+
+  const orderKeys = await env.SHOP_DB.list({ prefix: "order:" });
+  const orders = [];
+  for (const key of orderKeys.keys) {
+    const raw = await env.SHOP_DB.get(key.name);
+    if (raw) orders.push(JSON.parse(raw));
+  }
+
+  return {
+    generatedAt: new Date().toISOString(),
+    items: items,
+    settings: settings,
+    orders: orders,
+  };
+}
+
+async function runBackup(env, sourceLabel) {
+  const payload = await buildBackupPayload(env);
+  const json = JSON.stringify(payload, null, 2);
+  const dateKey = payload.generatedAt.slice(0, 10); // YYYY-MM-DD
+
+  // یه نسخه با تاریخ، و یه نسخه‌ی "آخرین بک‌آپ" همیشه توی KV می‌مونه
+  await env.SHOP_DB.put("backup:" + dateKey, json);
+  await env.SHOP_DB.put("backup:latest", json);
+
+  const filename = "reyhoon-backup-" + dateKey + ".json";
+  try {
+    await sendDocument(env.ADMIN_ID, json, filename,
+      "بک‌آپ " + (sourceLabel || "دستی") + " — " + payload.items.length + " محصول، " + payload.orders.length + " سفارش", env);
+  } catch (err) {
+    // حتی اگه ارسال فایل به تلگرام خطا بده، نسخه‌ی KV ذخیره شده
+  }
+
+  return payload;
+}
+
+async function sendDocument(chatId, content, filename, caption, env) {
+  const form = new FormData();
+  form.append("chat_id", String(chatId));
+  if (caption) form.append("caption", caption);
+  form.append("document", new Blob([content], { type: "application/json" }), filename);
+  const res = await fetch("https://api.telegram.org/bot" + env.BOT_TOKEN + "/sendDocument", {
+    method: "POST",
+    body: form,
+  });
+  if (!res.ok) {
+    const errText = await res.text();
+    console.log("sendDocument failed:", res.status, errText);
+  }
+  return res;
+}
+
 async function handleDebugSend(env) {
   const res = await tgApi("sendMessage", { chat_id: env.ADMIN_ID, text: "test from debug endpoint" }, env);
   const text = await res.text();
@@ -300,6 +416,12 @@ async function handleAdminMessage(msg, chatId, env) {
 
   if (msg.text && msg.text.startsWith("/order")) {
     await handleOrderLookup(msg.text, chatId, env);
+    return;
+  }
+
+  if (msg.text === "/backup") {
+    await sendMessage(chatId, "در حال تهیه بک‌آپ...", env);
+    await runBackup(env, "دستی");
     return;
   }
 
@@ -565,6 +687,18 @@ async function handleCallbackQuery(cq, env) {
   }
 
   await answerCallback(cq.id, env);
+
+  if (data.startsWith("apporder:") || data.startsWith("rejorder:")) {
+    await handleOrderDecision(data, chatId, messageId, env);
+    return;
+  }
+
+  if (data === "dobackup") {
+    await editMessage(chatId, messageId, "در حال تهیه بک‌آپ...", env);
+    await runBackup(env, "دستی");
+    await editMessage(chatId, messageId, "✅ بک‌آپ ساخته و برات به‌صورت فایل ارسال شد.", env, [[{ text: "🏠 منو", callback_data: "menu" }]]);
+    return;
+  }
 
   if (data === "menu") {
     await editMessage(chatId, messageId, DASHBOARD_TEXT, env, dashboardKeyboard());
@@ -838,7 +972,7 @@ function dashboardKeyboard() {
     [{ text: "📋 لیست محصولات", callback_data: "list:0" }, { text: "✏️ ویرایش محصول", callback_data: "editmenu:0" }],
     [{ text: "🗑 حذف محصول", callback_data: "delmenu:0" }, { text: "📊 آمار فروشگاه", callback_data: "stats" }],
     [{ text: "⚙️ تنظیمات اجرت", callback_data: "settings" }, { text: "🎫 تیکت‌های باز", callback_data: "tickets:0" }],
-    [{ text: "➕ افزودن محصول جدید", callback_data: "newitem" }],
+    [{ text: "➕ افزودن محصول جدید", callback_data: "newitem" }, { text: "💾 بک‌آپ فوری", callback_data: "dobackup" }],
     [{ text: "📖 روش سریع (عکس+کپشن)", callback_data: "addhelp" }],
   ];
 }
@@ -870,6 +1004,7 @@ const HELP_TEXT =
   "دستورهای دیگه:\n" +
   "/start - پنل مدیریت\n" +
   "/list - لیست محصولات\n" +
+  "/backup - تهیه فوری فایل پشتیبان (JSON)\n" +
   "/delete <id> - حذف محصول";
 
 // ============================================================
