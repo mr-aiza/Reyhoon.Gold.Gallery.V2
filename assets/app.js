@@ -6,25 +6,10 @@
   const PAGE_MODE = window.PAGE_MODE || "full"; // "featured" روی index، "full" روی shop
 
   // ---------- Data ----------
-  const DEFAULT_PRODUCTS = [
-    { id:1, name:"گردنبند زنجیر ظریف", category:"گردنبند", karat:18, weight:4.2, makingFee:18, art:"necklace", rating:4.8, badge:"پرفروش", featured:true },
-    { id:2, name:"دستبند زنجیری کلاسیک", category:"دستبند", karat:18, weight:6.8, makingFee:15, art:"bracelet", rating:4.6, badge:null, featured:false },
-    { id:3, name:"انگشتر سولیتر", category:"انگشتر", karat:18, weight:2.1, makingFee:28, art:"ring", rating:4.9, badge:"جدید", featured:true },
-    { id:4, name:"گوشواره مدالیونی", category:"گوشواره", karat:18, weight:1.8, makingFee:22, art:"earring", rating:4.7, badge:null, featured:false },
-    { id:5, name:"گردنبند طرح برگ", category:"گردنبند", karat:18, weight:5.5, makingFee:20, art:"necklace", rating:4.5, badge:null, featured:false },
-    { id:6, name:"دستبند پاندولی", category:"دستبند", karat:18, weight:3.4, makingFee:25, art:"bracelet", rating:4.8, badge:"پرفروش", featured:true },
-    { id:7, name:"شمش طلای ۲۴ عیار ۵ گرمی", category:"شمش", karat:24, weight:5, makingFee:3, art:"bar", rating:4.9, badge:"سرمایه‌گذاری", featured:true },
-    { id:8, name:"شمش طلای ۲۴ عیار ۱۰ گرمی", category:"شمش", karat:24, weight:10, makingFee:2, art:"bar", rating:4.9, badge:null, featured:false },
-    { id:9, name:"گردنبند ساده ۲۴ عیار", category:"گردنبند", karat:24, weight:6, makingFee:6, art:"necklace", rating:4.6, badge:null, featured:false },
-    { id:10, name:"النگوی ۲۴ عیار", category:"دستبند", karat:24, weight:8, makingFee:5, art:"bracelet", rating:4.7, badge:"جدید", featured:false },
-    { id:11, name:"دستبند کارکرده طرح ظریف", category:"دستبند", karat:"used", weight:5.5, makingFee:6, art:"bracelet", rating:4.3, badge:"کارکرده", featured:false },
-    { id:12, name:"گردنبند کارکرده سنتی", category:"گردنبند", karat:"used", weight:7.2, makingFee:5, art:"necklace", rating:4.2, badge:"کارکرده", featured:false },
-    { id:13, name:"انگشتر کارکرده", category:"انگشتر", karat:"used", weight:3.1, makingFee:8, art:"ring", rating:4.1, badge:"کارکرده", featured:false },
-    { id:14, name:"گوشواره کارکرده", category:"گوشواره", karat:"used", weight:2.5, makingFee:5, art:"earring", rating:4.0, badge:"کارکرده", featured:false },
-  ];
-
-  let PRODUCTS = DEFAULT_PRODUCTS.slice();
+  // محصولات فقط از گالری تلگرام (Cloudflare Worker) میان؛ دیتای نمایشی حذف شده.
+  let PRODUCTS = [];
   let galleryLoaded = false;
+  let galleryFailed = false;
 
   // آدرس Worker گالری تلگرام رو اینجا بذار
   const GALLERY_API_URL = "https://reyhoongoldgallery.tempmail41245.workers.dev";
@@ -37,16 +22,16 @@
       const res = await fetch(`${GALLERY_API_URL}/api/gallery`, { cache:"no-store" });
       if(!res.ok) throw new Error("bad status " + res.status);
       const data = await res.json();
-      if(Array.isArray(data.items) && data.items.length > 0){
+      if(Array.isArray(data.items)){
         PRODUCTS = data.items;
         galleryLoaded = true;
-        renderProducts();
-      } else if(Array.isArray(data.items)){
-        galleryLoaded = true;
+        galleryFailed = false;
         renderProducts();
       }
     } catch(err){
-      console.warn("اتصال به گالری تلگرام ناموفق بود، محصولات نمایشی نشون داده می‌شه:", err.message);
+      console.warn("اتصال به گالری تلگرام ناموفق بود:", err.message);
+      galleryFailed = true;
+      renderProducts();
     }
   }
 
@@ -114,7 +99,7 @@
     const label = document.getElementById("liveLabel");
     if(!dot || !label) return;
     dot.classList.toggle("stale", !usingLiveData);
-    label.textContent = usingLiveData ? "قیمت زنده" : "حالت نمایشی";
+    label.textContent = usingLiveData ? "قیمت زنده" : "در حال دریافت قیمت...";
   }
 
   function refreshAllUI(){
@@ -186,36 +171,6 @@
     svg.innerHTML = `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`;
   }
 
-  // ---------- Simulated price update (demo fallback) ----------
-  function updatePrice(){
-    if(usingLiveData) return;
-    const delta = (Math.random() - 0.48) * 35000;
-    pricePerGram = Math.max(37000000, pricePerGram + delta);
-    history.shift();
-    history.push(pricePerGram);
-
-    const mp = document.getElementById("mainPrice");
-    if(mp) mp.textContent = toToman(pricePerGram);
-    const p24 = document.getElementById("price24");
-    if(p24) p24.textContent = toToman(pricePerGram*1.33);
-    const pc = document.getElementById("priceCoin");
-    if(pc) pc.textContent = toToman(pricePerGram*8.13);
-
-    const changeEl = document.getElementById("priceChange");
-    if(changeEl){
-      const changeVal = document.getElementById("changeVal");
-      const positive = delta >= 0;
-      changeEl.className = "price-change num " + (positive ? "up" : "down");
-      changeVal.textContent = (positive ? "+" : "") + toToman(delta);
-    }
-
-    renderSparkline();
-    renderTicker();
-    renderProducts();
-    updateCalculator();
-    renderCart();
-  }
-
   // ---------- Products ----------
   function matchesFilters(p){
     if(PAGE_MODE === "featured") return !!p.featured;
@@ -244,12 +199,21 @@
     const list = visibleProducts();
 
     if(list.length === 0){
-      const msg = PAGE_MODE === "featured"
-        ? "هنوز محصول ویژه‌ای برای صفحه اصلی انتخاب نشده."
-        : "محصولی با این فیلترها پیدا نشد.";
+      let msg, sub = "";
+      if(!galleryLoaded && !galleryFailed){
+        msg = "در حال بارگذاری محصولات...";
+      } else if(galleryFailed){
+        msg = "در حال حاضر امکان بارگذاری محصولات نیست.";
+        sub = "لطفاً چند لحظه دیگه دوباره سر بزن.";
+      } else if(PAGE_MODE === "featured"){
+        msg = "هنوز محصول ویژه‌ای برای صفحه اصلی انتخاب نشده.";
+      } else {
+        msg = "محصولی با این فیلترها پیدا نشد.";
+        sub = "فیلترها رو تغییر بده یا بعداً دوباره سر بزن.";
+      }
       grid.innerHTML = `<div class="empty-state" style="grid-column:1/-1;">
         <div class="t">${msg}</div>
-        ${PAGE_MODE === "full" ? '<div>فیلترها رو تغییر بده یا بعداً دوباره سر بزن.</div>' : ''}
+        ${sub ? `<div>${sub}</div>` : ''}
       </div>`;
       return;
     }
@@ -713,7 +677,6 @@ ${lines}
   updateLiveIndicator();
   fetchLivePrice();
   fetchGallery();
-  setInterval(updatePrice, 3000);
   setInterval(fetchLivePrice, LIVE_REFRESH_MS);
   setInterval(fetchGallery, 30000);
 })();
