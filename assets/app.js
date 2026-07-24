@@ -29,7 +29,7 @@
   // آدرس Worker گالری تلگرام رو اینجا بذار
   const GALLERY_API_URL = "https://reyhoongoldgallery.tempmail41245.workers.dev";
   // آدرس Worker تیکت سفارش‌ها رو بعد از دیپلوی اینجا بذار
-  const ORDERS_API_URL = "";
+  const ORDERS_API_URL = "https://reyhoon-orders.tempmail41245.workers.dev";
 
   async function fetchGallery(){
     if(!GALLERY_API_URL) return;
