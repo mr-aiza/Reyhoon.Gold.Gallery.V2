@@ -189,9 +189,10 @@
     </div>
     <div id="checkoutStepSuccess" class="checkout-success" style="display:none;">
       <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-      <h3>سفارش شما آماده ارسال است</h3>
-      <p>برای نهایی کردن سفارش، روی دکمه زیر بزنید تا خلاصه سفارش به تلگرام ریحون گلد گالری ارسال بشه.</p>
-      <a class="checkout-submit" id="checkoutTelegramLink" href="#" target="_blank" rel="noopener" style="display:block;">ارسال در تلگرام</a>
+      <h3 id="checkoutSuccessTitle">سفارش شما ثبت شد</h3>
+      <p id="checkoutSuccessDesc">تیکت سفارش شما مستقیم برای ما ارسال شد. به‌زودی برای هماهنگی تماس می‌گیریم.</p>
+      <div id="ticketNumberDisplay" style="display:none;"></div>
+      <a class="checkout-submit" id="checkoutTelegramLink" href="#" target="_blank" rel="noopener" style="display:none;">ارسال دستی در تلگرام (پشتیبان)</a>
       <button class="link-ghost" id="checkoutDone" style="display:block;margin:12px auto 0;">بستن</button>
     </div>
   </div>
