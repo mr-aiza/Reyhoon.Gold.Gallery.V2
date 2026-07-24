@@ -13,8 +13,8 @@
 
   // آدرس Worker گالری تلگرام رو اینجا بذار
   const GALLERY_API_URL = "https://reyhoongoldgallery.tempmail41245.workers.dev";
-  // آدرس Worker تیکت سفارش‌ها رو بعد از دیپلوی اینجا بذار
-  const ORDERS_API_URL = "https://reyhoon-orders.tempmail41245.workers.dev";
+  // سفارش‌ها هم الان توی همین وورکر گالری هندل می‌شه (وورکر جدای orders دیگه لازم نیست)
+  const ORDERS_API_URL = GALLERY_API_URL;
 
   async function fetchGallery(){
     if(!GALLERY_API_URL) return;
