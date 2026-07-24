@@ -1,0 +1,95 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>پیگیری سفارش | ریحون گلد گالری</title>
+<meta name="description" content="پیگیری وضعیت سفارش‌های ثبت‌شده در ریحون گلد گالری.">
+<link rel="preconnect" href="https://cdnjs.cloudflare.com">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/vazirmatn/33.0.3/Vazirmatn-font-face.css" rel="stylesheet">
+<link rel="stylesheet" href="assets/styles.css">
+<style>
+  .orders-wrap{ max-width:640px; margin:0 auto; padding:0 20px 80px; }
+  .order-card{ background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:18px 20px; margin-bottom:16px; }
+  .order-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:10px; }
+  .order-num{ font-weight:700; font-size:15px; }
+  .order-date{ font-size:12px; color:var(--text-dim); }
+  .order-status{ font-size:12px; font-weight:600; padding:4px 10px; border-radius:999px; }
+  .order-status.pending{ background:rgba(201,162,39,0.15); color:var(--gold); }
+  .order-status.approved{ background:rgba(122,148,113,0.18); color:var(--green-light); }
+  .order-status.rejected{ background:rgba(176,107,86,0.18); color:var(--red-light); }
+  .order-items{ font-size:13px; color:var(--text-dim); line-height:2; margin:10px 0; }
+  .order-total{ display:flex; justify-content:space-between; font-size:14px; font-weight:600; border-top:1px solid var(--border); padding-top:10px; }
+  .orders-empty, .orders-loggedout{ text-align:center; padding:40px 20px; color:var(--text-dim); }
+  .orders-loggedout a{ color:var(--gold); }
+</style>
+</head>
+<body>
+
+<div id="siteHeaderRoot"></div>
+
+<div class="breadcrumb"><a href="index.html">صفحه اصلی</a> / پیگیری سفارش</div>
+
+<section class="page-hero">
+  <div class="container">
+    <h1>پیگیری سفارش‌ها</h1>
+    <p>وضعیت سفارش‌هایی که با همین حساب ثبت کردی رو اینجا می‌بینی.</p>
+  </div>
+</section>
+
+<div class="orders-wrap" id="ordersWrap">
+  <div class="orders-empty">در حال بارگذاری...</div>
+</div>
+
+<script>window.PAGE_MODE = "full";</script>
+<script src="assets/auth.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(function(){
+  const wrap = document.getElementById("ordersWrap");
+  const STATUS_LABEL = { pending: "در انتظار بررسی", approved: "تایید شده", rejected: "رد شده" };
+
+  function toToman(n){ return Math.round(n).toLocaleString("fa-IR"); }
+  function formatDate(ts){
+    try { return new Date(ts).toLocaleDateString("fa-IR", { year:"numeric", month:"long", day:"numeric" }); }
+    catch(e){ return ""; }
+  }
+
+  function renderOrders(orders){
+    if(!orders.length){
+      wrap.innerHTML = `<div class="orders-empty">هنوز سفارشی با این حساب ثبت نشده.</div>`;
+      return;
+    }
+    wrap.innerHTML = orders.map(o => {
+      const itemsHtml = o.items.map(it => `${it.name} (${it.karat} عیار، ${it.weight} گرم) × ${it.qty}`).join("<br>");
+      return `
+        <div class="order-card">
+          <div class="order-head">
+            <span class="order-num">سفارش #${o.ticketNumber}</span>
+            <span class="order-status ${o.status}">${STATUS_LABEL[o.status] || o.status}</span>
+          </div>
+          <div class="order-date">${formatDate(o.createdAt)}</div>
+          <div class="order-items">${itemsHtml}</div>
+          <div class="order-total"><span>جمع کل</span><span class="num">${toToman(o.total)} تومان</span></div>
+        </div>`;
+    }).join("");
+  }
+
+  async function init(){
+    if(!(window.ReyhoonAuth && window.ReyhoonAuth.isLoggedIn())){
+      wrap.innerHTML = `<div class="orders-loggedout">برای دیدن سفارش‌هات اول باید <a href="account.html">وارد حساب</a> بشی.</div>`;
+      return;
+    }
+    try{
+      const data = await window.ReyhoonAuth.apiFetch("/api/orders/mine", { method: "GET" });
+      renderOrders(data.orders || []);
+    } catch(err){
+      wrap.innerHTML = `<div class="orders-empty">مشکلی پیش اومد: ${err.message}</div>`;
+    }
+  }
+
+  init();
+})();
+</script>
+</body>
+</html>

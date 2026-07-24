@@ -33,6 +33,25 @@ export default {
       return handleNewOrder(request, env);
     }
 
+    // ---- احراز هویت کاربران (شماره تماس + رمز عبور) ----
+    if (url.pathname === "/api/auth/register" && request.method === "POST") {
+      return handleAuthRegister(request, env);
+    }
+    if (url.pathname === "/api/auth/login" && request.method === "POST") {
+      return handleAuthLogin(request, env);
+    }
+    if (url.pathname === "/api/auth/me" && request.method === "GET") {
+      return handleAuthMe(request, env);
+    }
+    if (url.pathname === "/api/auth/logout" && request.method === "POST") {
+      return handleAuthLogout(request, env);
+    }
+
+    // ---- پیگیری سفارش‌های کاربر لاگین‌کرده ----
+    if (url.pathname === "/api/orders/mine" && request.method === "GET") {
+      return handleMyOrders(request, env);
+    }
+
     if (url.pathname === "/telegram-webhook" && request.method === "POST") {
       return handleTelegramWebhook(request, env);
     }
@@ -100,6 +119,113 @@ function jsonResponse(obj, status) {
   });
 }
 
+// ============================================================
+//  احراز هویت کاربران (شماره تماس + رمز عبور)
+//  رمزها هرگز خام ذخیره نمی‌شن؛ فقط هش (SHA-256 + نمک تصادفی) در KV ذخیره می‌شه.
+// ============================================================
+const SESSION_TTL_SECONDS = 60 * 60 * 24 * 30; // ۳۰ روز
+
+function generateRandomToken() {
+  const bytes = crypto.getRandomValues(new Uint8Array(24));
+  return arrayBufferToBase64(bytes.buffer).replace(/[^a-zA-Z0-9]/g, "");
+}
+
+async function hashPassword(password, salt) {
+  const enc = new TextEncoder();
+  const data = enc.encode(salt + ":" + password);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
+  return arrayBufferToBase64(hashBuffer);
+}
+
+async function createSession(phone, env) {
+  const token = generateRandomToken();
+  await env.SHOP_DB.put("session:" + token, phone, { expirationTtl: SESSION_TTL_SECONDS });
+  return token;
+}
+
+async function getUserFromRequest(request, env) {
+  const authHeader = request.headers.get("Authorization") || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+  if (!token) return null;
+  const phone = await env.SHOP_DB.get("session:" + token);
+  if (!phone) return null;
+  const raw = await env.SHOP_DB.get("user:" + phone);
+  if (!raw) return null;
+  return JSON.parse(raw);
+}
+
+function publicUser(user) {
+  return { phone: user.phone, name: user.name || null };
+}
+
+async function handleAuthRegister(request, env) {
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return jsonResponse({ error: "بدنه درخواست نامعتبره." }, 400);
+  }
+  const phone = String(body.phone || "").trim();
+  const password = String(body.password || "");
+  const name = String(body.name || "").trim();
+
+  if (!/^09\d{9}$/.test(phone)) {
+    return jsonResponse({ error: "شماره تماس معتبر نیست (باید مثل 09xxxxxxxxx باشه)." }, 400);
+  }
+  if (password.length < 4) {
+    return jsonResponse({ error: "رمز عبور باید حداقل ۴ کاراکتر باشه." }, 400);
+  }
+
+  const existing = await env.SHOP_DB.get("user:" + phone);
+  if (existing) {
+    return jsonResponse({ error: "این شماره قبلاً ثبت‌نام شده. وارد شو." }, 409);
+  }
+
+  const salt = generateRandomToken();
+  const passwordHash = await hashPassword(password, salt);
+  const user = { phone, name: name || null, passwordHash, salt, createdAt: Date.now() };
+  await env.SHOP_DB.put("user:" + phone, JSON.stringify(user));
+
+  const token = await createSession(phone, env);
+  return jsonResponse({ token, ...publicUser(user) });
+}
+
+async function handleAuthLogin(request, env) {
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return jsonResponse({ error: "بدنه درخواست نامعتبره." }, 400);
+  }
+  const phone = String(body.phone || "").trim();
+  const password = String(body.password || "");
+
+  const raw = await env.SHOP_DB.get("user:" + phone);
+  if (!raw) return jsonResponse({ error: "شماره تماس یا رمز عبور اشتباهه." }, 401);
+
+  const user = JSON.parse(raw);
+  const hash = await hashPassword(password, user.salt);
+  if (hash !== user.passwordHash) {
+    return jsonResponse({ error: "شماره تماس یا رمز عبور اشتباهه." }, 401);
+  }
+
+  const token = await createSession(phone, env);
+  return jsonResponse({ token, ...publicUser(user) });
+}
+
+async function handleAuthMe(request, env) {
+  const user = await getUserFromRequest(request, env);
+  if (!user) return jsonResponse({ error: "وارد نشدی." }, 401);
+  return jsonResponse(publicUser(user));
+}
+
+async function handleAuthLogout(request, env) {
+  const authHeader = request.headers.get("Authorization") || "";
+  const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
+  if (token) await env.SHOP_DB.delete("session:" + token);
+  return jsonResponse({ ok: true });
+}
+
 async function handleNewOrder(request, env) {
   let body;
   try {
@@ -118,6 +244,9 @@ async function handleNewOrder(request, env) {
     return jsonResponse({ ok: false, error: "missing fields" }, 400);
   }
 
+  // اگه کاربر لاگین باشه، سفارش به حسابش وصل می‌شه (برای پیگیری بعدی)
+  const account = await getUserFromRequest(request, env);
+
   const ticketNumber = await getNextTicket(env);
 
   const order = {
@@ -128,10 +257,19 @@ async function handleNewOrder(request, env) {
     items: items,
     total: total,
     status: "pending",
+    accountPhone: account ? account.phone : null,
     createdAt: Date.now(),
   };
 
   await env.SHOP_DB.put("order:" + ticketNumber, JSON.stringify(order));
+
+  if (account) {
+    try {
+      await addOrderToUserIndex(account.phone, ticketNumber, env);
+    } catch (err) {
+      // ایندکس نشدن سفارش نباید ثبت سفارش رو خراب کنه
+    }
+  }
 
   // ---- کم کردن موجودی انبار بر اساس محصولات سفارش‌داده‌شده ----
   try {
@@ -205,6 +343,33 @@ async function getNextTicket(env) {
   const next = current ? parseInt(current) + 1 : 1001;
   await env.SHOP_DB.put("next_ticket", String(next));
   return next;
+}
+
+// ============================================================
+//  پیگیری سفارش بر اساس حساب کاربری (شماره تماس لاگین‌شده)
+// ============================================================
+async function addOrderToUserIndex(phone, ticketNumber, env) {
+  const raw = await env.SHOP_DB.get("orders_by_phone:" + phone);
+  const list = raw ? JSON.parse(raw) : [];
+  if (!list.includes(ticketNumber)) list.unshift(ticketNumber);
+  await env.SHOP_DB.put("orders_by_phone:" + phone, JSON.stringify(list));
+}
+
+async function handleMyOrders(request, env) {
+  const user = await getUserFromRequest(request, env);
+  if (!user) return jsonResponse({ error: "برای دیدن سفارش‌هات باید وارد حساب بشی." }, 401);
+
+  const raw = await env.SHOP_DB.get("orders_by_phone:" + user.phone);
+  const ticketNumbers = raw ? JSON.parse(raw) : [];
+
+  const orders = [];
+  for (const tn of ticketNumbers) {
+    const orderRaw = await env.SHOP_DB.get("order:" + tn);
+    if (orderRaw) orders.push(JSON.parse(orderRaw));
+  }
+  orders.sort((a, b) => b.createdAt - a.createdAt);
+
+  return jsonResponse({ orders });
 }
 
 async function handleOrderDecision(data, chatId, messageId, env) {

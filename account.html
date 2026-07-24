@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>حساب کاربری | ریحون گلد گالری</title>
+<meta name="description" content="ورود یا ثبت‌نام در ریحون گلد گالری برای پیگیری سفارش و مدیریت علاقه‌مندی‌ها.">
+<link rel="preconnect" href="https://cdnjs.cloudflare.com">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/vazirmatn/33.0.3/Vazirmatn-font-face.css" rel="stylesheet">
+<link rel="stylesheet" href="assets/styles.css">
+<style>
+  .auth-wrap{ max-width:420px; margin:0 auto; padding:40px 20px 80px; }
+  .auth-card{ background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-xl); overflow:hidden; }
+  .auth-tabs{ display:flex; }
+  .auth-tab{ flex:1; padding:14px; text-align:center; font-size:14px; font-weight:500; color:var(--text-dim); border-bottom:2px solid var(--border); cursor:pointer; }
+  .auth-tab.active{ color:var(--gold); border-bottom-color:var(--gold); }
+  .auth-form{ display:none; }
+  .auth-form.active{ display:flex; }
+  .auth-msg{ font-size:13px; padding:0 24px; margin-top:-4px; display:none; }
+  .auth-msg.show{ display:block; }
+  .auth-msg.error{ color:var(--red-light); }
+  .auth-msg.success{ color:var(--gold); }
+  .auth-account{ padding:24px; display:none; flex-direction:column; gap:var(--sp-4); text-align:center; }
+  .auth-account.active{ display:flex; }
+  .auth-account .name{ font-size:18px; font-weight:600; }
+  .auth-account .phone{ color:var(--text-dim); font-size:13px; }
+</style>
+</head>
+<body>
+
+<div id="siteHeaderRoot"></div>
+
+<div class="breadcrumb"><a href="index.html">صفحه اصلی</a> / حساب کاربری</div>
+
+<section class="page-hero">
+  <div class="container">
+    <h1>حساب کاربری</h1>
+    <p>با شماره تماس و رمز عبورت وارد شو تا سفارش‌هات رو پیگیری کنی و لیست علاقه‌مندی‌هات ذخیره بمونه.</p>
+  </div>
+</section>
+
+<div class="auth-wrap">
+  <div class="auth-card">
+
+    <div class="auth-account" id="authAccountBox">
+      <div class="name" id="authAccountName"></div>
+      <div class="phone" id="authAccountPhone"></div>
+      <a class="checkout-submit" href="orders.html" style="display:block;">پیگیری سفارش‌ها</a>
+      <button class="link-ghost" id="logoutBtn">خروج از حساب</button>
+    </div>
+
+    <div id="authTabsWrap">
+      <div class="auth-tabs">
+        <div class="auth-tab active" data-tab="login">ورود</div>
+        <div class="auth-tab" data-tab="register">ثبت‌نام</div>
+      </div>
+
+      <form class="checkout-form auth-form active" id="loginForm">
+        <div class="auth-msg" id="loginMsg"></div>
+        <div class="field" id="loginPhoneField">
+          <label for="loginPhone">شماره تماس</label>
+          <input type="tel" id="loginPhone" placeholder="09xxxxxxxxx" inputmode="numeric">
+          <div class="field-error">شماره تماس معتبر وارد کن</div>
+        </div>
+        <div class="field" id="loginPasswordField">
+          <label for="loginPassword">رمز عبور</label>
+          <input type="password" id="loginPassword" placeholder="رمز عبورت">
+          <div class="field-error">رمز عبور رو وارد کن</div>
+        </div>
+        <button type="submit" class="checkout-submit" id="loginSubmit">ورود</button>
+      </form>
+
+      <form class="checkout-form auth-form" id="registerForm">
+        <div class="auth-msg" id="registerMsg"></div>
+        <div class="field" id="regNameField">
+          <label for="regName">نام (اختیاری)</label>
+          <input type="text" id="regName" placeholder="مثلاً سارا محمدی">
+        </div>
+        <div class="field" id="regPhoneField">
+          <label for="regPhone">شماره تماس</label>
+          <input type="tel" id="regPhone" placeholder="09xxxxxxxxx" inputmode="numeric">
+          <div class="field-error">شماره تماس معتبر وارد کن (مثل 09123456789)</div>
+        </div>
+        <div class="field" id="regPasswordField">
+          <label for="regPassword">رمز عبور</label>
+          <input type="password" id="regPassword" placeholder="حداقل ۴ کاراکتر">
+          <div class="field-error">رمز عبور باید حداقل ۴ کاراکتر باشه</div>
+        </div>
+        <button type="submit" class="checkout-submit" id="registerSubmit">ثبت‌نام</button>
+      </form>
+    </div>
+
+  </div>
+</div>
+
+<script>window.PAGE_MODE = "full";</script>
+<script src="assets/auth.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(function(){
+  const tabs = document.querySelectorAll(".auth-tab");
+  const forms = { login: document.getElementById("loginForm"), register: document.getElementById("registerForm") };
+  tabs.forEach(tab => {
+    tab.addEventListener("click", () => {
+      tabs.forEach(t => t.classList.remove("active"));
+      tab.classList.add("active");
+      Object.values(forms).forEach(f => f.classList.remove("active"));
+      forms[tab.dataset.tab].classList.add("active");
+    });
+  });
+
+  function showAccountView(){
+    const user = window.ReyhoonAuth.getUser();
+    document.getElementById("authTabsWrap").style.display = "none";
+    document.getElementById("authAccountBox").classList.add("active");
+    document.getElementById("authAccountName").textContent = (user && user.name) ? user.name : "کاربر ریحون گلد گالری";
+    document.getElementById("authAccountPhone").textContent = user ? user.phone : "";
+  }
+
+  function showFormsView(){
+    document.getElementById("authTabsWrap").style.display = "block";
+    document.getElementById("authAccountBox").classList.remove("active");
+  }
+
+  if(window.ReyhoonAuth && window.ReyhoonAuth.isLoggedIn()){
+    showAccountView();
+  }
+
+  function setMsg(el, text, type){
+    el.textContent = text;
+    el.className = "auth-msg show " + type;
+  }
+
+  document.getElementById("loginForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const phone = document.getElementById("loginPhone").value.trim();
+    const password = document.getElementById("loginPassword").value;
+    const msgEl = document.getElementById("loginMsg");
+    const btn = document.getElementById("loginSubmit");
+    btn.disabled = true; btn.textContent = "در حال ورود...";
+    try {
+      await window.ReyhoonAuth.login(phone, password);
+      setMsg(msgEl, "با موفقیت وارد شدی ✅", "success");
+      showAccountView();
+    } catch(err){
+      setMsg(msgEl, err.message || "ورود ناموفق بود.", "error");
+    } finally {
+      btn.disabled = false; btn.textContent = "ورود";
+    }
+  });
+
+  document.getElementById("registerForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const name = document.getElementById("regName").value.trim();
+    const phone = document.getElementById("regPhone").value.trim();
+    const password = document.getElementById("regPassword").value;
+    const msgEl = document.getElementById("registerMsg");
+    const btn = document.getElementById("registerSubmit");
+    btn.disabled = true; btn.textContent = "در حال ثبت‌نام...";
+    try {
+      await window.ReyhoonAuth.register(phone, password, name);
+      setMsg(msgEl, "ثبت‌نام با موفقیت انجام شد ✅", "success");
+      showAccountView();
+    } catch(err){
+      setMsg(msgEl, err.message || "ثبت‌نام ناموفق بود.", "error");
+    } finally {
+      btn.disabled = false; btn.textContent = "ثبت‌نام";
+    }
+  });
+
+  document.getElementById("logoutBtn").addEventListener("click", async () => {
+    await window.ReyhoonAuth.logout();
+    showFormsView();
+  });
+})();
+</script>
+</body>
+</html>
