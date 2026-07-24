@@ -11,7 +11,7 @@ const CORS_HEADERS = {
 
 const PAGE_SIZE = 5;
 
-const DEFAULT_SETTINGS = { fee18: 20, fee24: 4, feeUsed: 6 };
+const DEFAULT_SETTINGS = { fee18: 20, fee24: 4 };
 
 // ------------------------------------------------------------
 //  Router
@@ -26,6 +26,11 @@ export default {
 
     if (url.pathname === "/api/gallery" && request.method === "GET") {
       return handleGetGallery(env);
+    }
+
+    // ---- سفارش‌ها (قبلاً وورکر جدا reyhoon-orders، الان ادغام شده اینجا) ----
+    if (url.pathname === "/api/order" && request.method === "POST") {
+      return handleNewOrder(request, env);
     }
 
     if (url.pathname === "/telegram-webhook" && request.method === "POST") {
@@ -77,6 +82,82 @@ async function getSettings(env) {
 
 async function saveSettings(settings, env) {
   await env.SHOP_DB.put("settings", JSON.stringify(settings));
+}
+
+// ============================================================
+//  سفارش‌ها (ادغام‌شده از وورکر reyhoon-orders)
+// ============================================================
+function jsonResponse(obj, status) {
+  return new Response(JSON.stringify(obj), {
+    status: status || 200,
+    headers: { "Content-Type": "application/json", ...CORS_HEADERS },
+  });
+}
+
+async function handleNewOrder(request, env) {
+  let body;
+  try {
+    body = await request.json();
+  } catch (err) {
+    return jsonResponse({ ok: false, error: "invalid json" }, 400);
+  }
+
+  const name = String(body.name || "").trim();
+  const phone = String(body.phone || "").trim();
+  const address = String(body.address || "").trim();
+  const items = Array.isArray(body.items) ? body.items : [];
+  const total = Number(body.total) || 0;
+
+  if (!name || !phone || !address || items.length === 0) {
+    return jsonResponse({ ok: false, error: "missing fields" }, 400);
+  }
+
+  const ticketNumber = await getNextTicket(env);
+
+  const order = {
+    ticketNumber: ticketNumber,
+    name: name,
+    phone: phone,
+    address: address,
+    items: items,
+    total: total,
+    status: "pending",
+    createdAt: Date.now(),
+  };
+
+  await env.SHOP_DB.put("order:" + ticketNumber, JSON.stringify(order));
+
+  const itemLines = items.map(function (it) {
+    const karatText = it.karat + " عیار";
+    return "- " + it.name + " (" + karatText + "، " + it.weight + " گرم) x" + it.qty + " = " + toToman(it.unitPrice * it.qty) + " تومان";
+  }).join("\n");
+
+  const message =
+    "تیکت سفارش جدید #" + ticketNumber + "\n\n" +
+    "نام: " + name + "\n" +
+    "تماس: " + phone + "\n" +
+    "آدرس: " + address + "\n\n" +
+    "اقلام:\n" + itemLines + "\n\n" +
+    "جمع کل: " + toToman(total) + " تومان";
+
+  try {
+    await sendMessage(env.ADMIN_ID, message, env);
+  } catch (err) {
+    // حتی اگه ارسال به تلگرام خطا بده، تیکت ذخیره شده و شماره‌ش برمی‌گرده
+  }
+
+  return jsonResponse({ ok: true, ticketNumber: ticketNumber });
+}
+
+function toToman(n) {
+  return Math.round(n).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+}
+
+async function getNextTicket(env) {
+  const current = await env.SHOP_DB.get("next_ticket");
+  const next = current ? parseInt(current) + 1 : 1001;
+  await env.SHOP_DB.put("next_ticket", String(next));
+  return next;
 }
 
 // ============================================================
@@ -194,6 +275,11 @@ async function handleAdminMessage(msg, chatId, env) {
     return;
   }
 
+  if (msg.text && msg.text.startsWith("/order")) {
+    await handleOrderLookup(msg.text, chatId, env);
+    return;
+  }
+
   await sendMessage(chatId, "برای شروع از /start استفاده کن.", env);
 }
 
@@ -268,7 +354,6 @@ async function handlePendingState(state, msg, chatId, env) {
     const settings = await getSettings(env);
     if (key === "18") settings.fee18 = val;
     else if (key === "24") settings.fee24 = val;
-    else settings.feeUsed = val;
     await saveSettings(settings, env);
     await sendMessage(chatId, "اجرت پیش‌فرض به‌روزرسانی شد ✅", env, [[{ text: "⚙️ تنظیمات اجرت", callback_data: "settings" }, { text: "🏠 منو", callback_data: "menu" }]]);
     return true;
@@ -327,7 +412,6 @@ function categoryKeyboard() {
 function karatKeyboard() {
   return [
     [{ text: "18 عیار", callback_data: "newkarat:18" }, { text: "24 عیار", callback_data: "newkarat:24" }],
-    [{ text: "کارکرده", callback_data: "newkarat:used" }],
     [{ text: "انصراف", callback_data: "newitem_cancel" }],
   ];
 }
@@ -353,7 +437,7 @@ function cancelKeyboard() {
 }
 
 function draftSummaryText(draft) {
-  const karatTxt = draft.karat === "used" ? "کارکرده" : draft.karat + " عیار";
+  const karatTxt = draft.karat + " عیار";
   const feeTxt = draft.fee != null ? draft.fee + "٪ (دستی)" : "پیش‌فرض";
   return (
     "پیش‌نمایش محصول:\n\n" +
@@ -387,8 +471,8 @@ async function finalizeNewItem(chatId, env) {
   const settings = await getSettings(env);
   const nextId = await getNextId(env);
 
-  const karatVal = draft.karat === "used" ? "used" : parseInt(draft.karat);
-  const defaultFee = karatVal === 24 ? settings.fee24 : karatVal === "used" ? settings.feeUsed : settings.fee18;
+  const karatVal = parseInt(draft.karat);
+  const defaultFee = karatVal === 24 ? settings.fee24 : settings.fee18;
 
   const item = {
     id: nextId,
@@ -557,13 +641,11 @@ async function handleCallbackQuery(cq, env) {
     const text =
       "نرخ اجرت پیش‌فرض:\n" +
       "طلای ۱۸ عیار: " + settings.fee18 + "%\n" +
-      "طلای ۲۴ عیار: " + settings.fee24 + "%\n" +
-      "کارکرده: " + settings.feeUsed + "%\n\n" +
+      "طلای ۲۴ عیار: " + settings.fee24 + "%\n\n" +
       "برای تغییر هرکدوم روی دکمه بزن.";
     await editMessage(chatId, messageId, text, env, [
       [{ text: "ویرایش اجرت ۱۸ عیار", callback_data: "setfee:18" }],
       [{ text: "ویرایش اجرت ۲۴ عیار", callback_data: "setfee:24" }],
-      [{ text: "ویرایش اجرت کارکرده", callback_data: "setfee:used" }],
       [{ text: "« بازگشت", callback_data: "menu" }],
     ]);
     return;
@@ -632,7 +714,7 @@ const HELP_TEXT =
   "برچسب: پرفروش\n" +
   "نمایش: بله\n\n" +
   "دسته: گردنبند/دستبند/انگشتر/گوشواره/شمش\n" +
-  "عیار: 18 یا 24 یا used (کارکرده)\n" +
+  "عیار: 18 یا 24\n" +
   "اجرت اختیاریه — اگه ندی از تنظیمات پیش‌فرض استفاده میشه.\n" +
   "برچسب و «نمایش» (نمایش در صفحه اصلی) هم اختیاری‌ان — پیش‌فرض «خیر».\n\n" +
   "برای افزودن سریع محصول مشابه قبلی، از دکمه «➕ مشابه همین» بعد از ثبت هر محصول استفاده کن — دیگه لازم نیست دسته/عیار/اجرت رو دوباره بزنی.\n\n" +
@@ -658,8 +740,8 @@ async function handleNewItem(msg, env) {
   const settings = await getSettings(env);
   const nextId = await getNextId(env);
 
-  const karatVal = fields.karat === "used" ? "used" : parseInt(fields.karat);
-  const defaultFee = karatVal === 24 ? settings.fee24 : karatVal === "used" ? settings.feeUsed : settings.fee18;
+  const karatVal = parseInt(fields.karat);
+  const defaultFee = karatVal === 24 ? settings.fee24 : settings.fee18;
   const featuredVal = fields.featured ? /^(بله|yes|true|1)$/i.test(fields.featured.trim()) : false;
 
   const item = {
@@ -728,7 +810,7 @@ function arrayBufferToBase64(buffer) {
 //  لیست / حذف محصولات
 // ============================================================
 function formatItemLine(it) {
-  return "#" + it.id + " - " + it.name + " (" + it.category + ", " + (it.karat === "used" ? "کارکرده" : it.karat + " عیار") + ", " + it.weight + " گرم)" + (it.featured ? " ⭐" : "");
+  return "#" + it.id + " - " + it.name + " (" + it.category + ", " + it.karat + " عیار, " + it.weight + " گرم)" + (it.featured ? " ⭐" : "");
 }
 
 function buildItemListView(items, page, mode) {
@@ -782,6 +864,24 @@ async function handleDeleteCommand(text, chatId, env) {
   const filtered = items.filter((it) => it.id !== id);
   await saveItems(filtered, env);
   await sendMessage(chatId, filtered.length < before ? "حذف شد: " + id : "پیدا نشد: " + id, env);
+}
+
+async function handleOrderLookup(text, chatId, env) {
+  const parts = text.trim().split(/\s+/);
+  const ticket = parseInt(parts[1]);
+  if (!ticket) {
+    await sendMessage(chatId, "فرمت درست: /order 1001", env);
+    return;
+  }
+  const raw = await env.SHOP_DB.get("order:" + ticket);
+  if (!raw) {
+    await sendMessage(chatId, "تیکتی با این شماره پیدا نشد.", env);
+    return;
+  }
+  const order = JSON.parse(raw);
+  await sendMessage(chatId,
+    "تیکت #" + order.ticketNumber + " - وضعیت: " + order.status + "\n" +
+    order.name + " - " + order.phone + "\n" + order.address, env);
 }
 
 // ============================================================
