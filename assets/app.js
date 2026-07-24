@@ -159,7 +159,6 @@
   function karatBaseRate(karat){ return karat === 24 ? price24kVal() : pricePerGram; }
   function karatLabel(karat){
     if(karat === 24) return "۲۴ عیار";
-    if(karat === "used") return "کارکرده";
     return "۱۸ عیار";
   }
   function productPrice(p){ return karatBaseRate(p.karat) * p.weight * (1 + p.makingFee/100); }
