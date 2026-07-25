@@ -82,7 +82,8 @@ function callbackRequiredLevel(data) {
     data === "discounts" || data === "newcode" || data.startsWith("disctype:") || data.startsWith("delcode:") ||
     data === "stats" || data === "favstats" ||
     data.startsWith("users:") || data.startsWith("viewuser:") || data.startsWith("edituser:") ||
-    data.startsWith("resetpass:") || data.startsWith("deluser")
+    data.startsWith("resetpass:") || data.startsWith("deluser") ||
+    data.startsWith("report:")
   ) {
     return 3; // سطح کامل
   }
@@ -231,9 +232,16 @@ export default {
   },
 
   // این بخش رو Cloudflare خودکار صدا می‌زنه، فقط باید توی Settings → Triggers
-  // یه Cron Trigger اضافه کنی (مثلاً هر روز ساعت ۰۰:۰۰ → 0 0 * * *)
+  // یه Cron Trigger اضافه کنی (مثلاً هر روز ساعت ۰۰:۳۰ → 30 0 * * *)
+  // با همین یه تریگر روزانه: هر روز بک‌آپ کامل + گزارش روزانه فرستاده می‌شه،
+  // و هر جمعه (روز تعطیل هفته) گزارش هفتگی هم اضافه می‌شه.
   async scheduled(event, env, ctx) {
     ctx.waitUntil(runBackup(env, "خودکار (زمان‌بندی‌شده)"));
+    ctx.waitUntil(sendScheduledReport(env, "daily"));
+    const dayOfWeek = new Date().getDay(); // 5 = جمعه
+    if (dayOfWeek === 5) {
+      ctx.waitUntil(sendScheduledReport(env, "weekly"));
+    }
   },
 };
 
@@ -310,8 +318,24 @@ async function getUserFromRequest(request, env) {
   return JSON.parse(raw);
 }
 
+// آخرین مشخصات تحویل (نام، ایمیل، کدپستی، آدرس) که کاربر موقع ثبت سفارش وارد کرده،
+// روی حساب کاربریش ذخیره می‌شه — هم برای پرکردن خودکار فرم بعدی، هم برای نمایش تو پنل ادمین («کاربران»)
+async function saveUserShippingProfile(phone, profile, env) {
+  const raw = await env.SHOP_DB.get("user:" + phone);
+  if (!raw) return;
+  const user = JSON.parse(raw);
+  user.shipping = {
+    name: profile.name || user.name || "",
+    email: profile.email || "",
+    postalCode: profile.postalCode || "",
+    address: profile.address || "",
+    updatedAt: Date.now(),
+  };
+  await env.SHOP_DB.put("user:" + phone, JSON.stringify(user));
+}
+
 function publicUser(user) {
-  return { phone: user.phone, name: user.name || null };
+  return { phone: user.phone, name: user.name || null, shipping: user.shipping || null };
 }
 
 async function handleAuthRegister(request, env) {
@@ -392,6 +416,8 @@ async function handleNewOrder(request, env) {
 
   const name = String(body.name || "").trim();
   const phone = String(body.phone || "").trim();
+  const email = String(body.email || "").trim();
+  const postalCode = String(body.postalCode || "").trim();
   const address = String(body.address || "").trim();
   const items = Array.isArray(body.items) ? body.items : [];
   const subtotal = Number(body.subtotal) || Number(body.total) || 0;
@@ -411,7 +437,7 @@ async function handleNewOrder(request, env) {
     }
   }
 
-  if (!name || !phone || !address || items.length === 0) {
+  if (!name || !phone || !email || !postalCode || !address || items.length === 0) {
     return jsonResponse({ ok: false, error: "missing fields" }, 400);
   }
 
@@ -425,12 +451,16 @@ async function handleNewOrder(request, env) {
     ticketNumber: ticketNumber,
     name: name,
     phone: phone,
+    email: email,
+    postalCode: postalCode,
     address: address,
     items: items,
     subtotal: subtotal,
     discount: discountInfo,
     total: total,
     status: "pending",
+    trackingCode: null,
+    trackingSetAt: null,
     accountPhone: account ? account.phone : null,
     invoiceToken: invoiceToken,
     createdAt: Date.now(),
@@ -443,6 +473,13 @@ async function handleNewOrder(request, env) {
       await addOrderToUserIndex(account.phone, ticketNumber, env);
     } catch (err) {
       // ایندکس نشدن سفارش نباید ثبت سفارش رو خراب کنه
+    }
+    // آخرین مشخصات تحویل کاربر رو روی خودِ حساب هم ذخیره می‌کنیم تا تو پنل ادمین
+    // (بخش «کاربران») و بعداً برای پرکردن خودکار فرم سفارش بعدی قابل استفاده باشه
+    try {
+      await saveUserShippingProfile(account.phone, { name, email, postalCode, address }, env);
+    } catch (err) {
+      // خطای ذخیره پروفایل نباید ثبت سفارش رو خراب کنه
     }
   }
 
@@ -466,6 +503,8 @@ async function handleNewOrder(request, env) {
     "تیکت سفارش جدید #" + ticketNumber + "\n\n" +
     "نام: " + name + "\n" +
     "تماس: " + phone + "\n" +
+    "ایمیل: " + email + "\n" +
+    "کدپستی: " + postalCode + "\n" +
     "آدرس: " + address + "\n\n" +
     "اقلام:\n" + itemLines + discountLine + "\n\n" +
     "جمع کل: " + toToman(total) + " تومان";
@@ -847,13 +886,22 @@ async function buildUserDetailView(phone, env) {
   const ordersRaw = await env.SHOP_DB.get("orders_by_phone:" + phone);
   const ticketNumbers = ordersRaw ? JSON.parse(ordersRaw) : [];
 
+  const shippingBlock = user.shipping
+    ? "\n\n📮 آخرین مشخصات ارسال (از آخرین سفارش):\n" +
+      "نام: " + (user.shipping.name || "—") + "\n" +
+      "ایمیل: " + (user.shipping.email || "—") + "\n" +
+      "کدپستی: " + (user.shipping.postalCode || "—") + "\n" +
+      "آدرس: " + (user.shipping.address || "—")
+    : "";
+
   const text =
     "👤 " + (user.name || "بدون نام") + "\n" +
     "شماره تماس: " + user.phone + "\n" +
     "تاریخ عضویت: " + new Date(user.createdAt).toLocaleDateString("fa-IR") + "\n\n" +
     "🧾 تعداد سفارش‌ها: " + ticketNumbers.length +
     (ticketNumbers.length ? "\nشماره تیکت‌ها: " + ticketNumbers.slice(0, 10).join("، ") : "") + "\n\n" +
-    "❤️ علاقه‌مندی‌ها (" + favNames.length + "):\n" + (favNames.length ? favNames.join("\n") : "—");
+    "❤️ علاقه‌مندی‌ها (" + favNames.length + "):\n" + (favNames.length ? favNames.join("\n") : "—") +
+    shippingBlock;
 
   return { text, keyboard: userDetailKeyboard(phone) };
 }
@@ -963,6 +1011,7 @@ function ordersMenuKeyboard() {
     [{ text: "🚚 سفارش‌های در حال انجام", callback_data: "ordlist:in_progress:0" }],
     [{ text: "✅ سفارش‌های تکمیل‌شده", callback_data: "ordlist:completed:0" }],
     [{ text: "⏳ در انتظار تایید", callback_data: "ordlist:pending:0" }, { text: "❌ رد شده", callback_data: "ordlist:rejected:0" }],
+    [{ text: "🔍 جستجوی سفارش (تلفن/نام)", callback_data: "ordersearch" }],
     [{ text: "🏠 منو", callback_data: "menu" }],
   ];
 }
@@ -1032,12 +1081,18 @@ async function editOrderDetailMessage(chatId, messageId, env, status, ticketNumb
   const order = JSON.parse(raw);
   const itemLines = order.items.map((it) => "- " + it.name + " (" + it.karat + " عیار، " + it.weight + " گرم) x" + it.qty).join("\n");
 
+  const trackingLine = order.trackingCode
+    ? "\nکد رهگیری پستی: " + order.trackingCode
+    : "\nکد رهگیری پستی: ثبت نشده";
+
   const text =
     "🧾 سفارش #" + order.ticketNumber + " — " + orderStatusLabel(order.status) + "\n\n" +
     "نام: " + order.name + "\n" +
     "تماس: " + order.phone + "\n" +
+    (order.email ? "ایمیل: " + order.email + "\n" : "") +
+    (order.postalCode ? "کدپستی: " + order.postalCode + "\n" : "") +
     "آدرس: " + order.address + "\n" +
-    "تاریخ و ساعت ثبت: " + formatOrderDate(order.createdAt) + "\n\n" +
+    "تاریخ و ساعت ثبت: " + formatOrderDate(order.createdAt) + trackingLine + "\n\n" +
     "اقلام:\n" + itemLines + "\n\n" +
     "جمع کل: " + toToman(order.total) + " تومان";
 
@@ -1047,10 +1102,74 @@ async function editOrderDetailMessage(chatId, messageId, env, status, ticketNumb
   } else if (order.status === "completed") {
     keyboard.push([{ text: "🧾 فاکتور", url: buildInvoiceUrl(order, env, { auto: true }) }]);
   }
+  if (order.status === "in_progress" || order.status === "completed") {
+    keyboard.push([{ text: order.trackingCode ? "🚚 ویرایش کد رهگیری" : "🚚 ثبت کد رهگیری پستی", callback_data: "settrack:" + order.ticketNumber + ":" + status + ":" + page }]);
+  }
   keyboard.push([{ text: "🗑 حذف سفارش", callback_data: "orddel:" + order.ticketNumber + ":" + status + ":" + page }]);
   keyboard.push([{ text: "« بازگشت", callback_data: "ordlist:" + status + ":" + page }, { text: "🏠 منو", callback_data: "menu" }]);
 
   await editMessage(chatId, messageId, text, env, keyboard);
+}
+
+async function beginSetTracking(chatId, messageId, env, ticketNumber, status, page) {
+  await env.SHOP_DB.put("state:" + chatId, "awaiting_tracking:" + ticketNumber + ":" + status + ":" + page);
+  await editMessage(chatId, messageId,
+    "کد رهگیری پستی مرسوله سفارش #" + ticketNumber + " رو بفرست (یا /start برای انصراف).", env);
+}
+
+async function finishSetTracking(code, chatId, env, ticketNumber, status, page) {
+  const raw = await env.SHOP_DB.get("order:" + ticketNumber);
+  if (!raw) {
+    await sendMessage(chatId, "این سفارش پیدا نشد.", env);
+    return;
+  }
+  const order = JSON.parse(raw);
+  order.trackingCode = code;
+  order.trackingSetAt = Date.now();
+  await env.SHOP_DB.put("order:" + ticketNumber, JSON.stringify(order));
+  await env.SHOP_DB.delete("state:" + chatId);
+  await sendMessage(chatId,
+    "✅ کد رهگیری برای سفارش #" + ticketNumber + " ثبت شد: " + code + "\nمشتری می‌تونه اینو تو صفحه «پیگیری سفارش‌ها» تو سایت ببینه.", env,
+    [[{ text: "« بازگشت به سفارش", callback_data: "ordview:" + status + ":" + ticketNumber + ":" + page }, { text: "🏠 منو", callback_data: "menu" }]]);
+}
+
+// ============================================================
+//  جستجوی سفارش با شماره تلفن یا نام
+// ============================================================
+async function searchOrders(query, env) {
+  const q = String(query || "").trim().toLowerCase();
+  if (!q) return [];
+  const list = await env.SHOP_DB.list({ prefix: "order:" });
+  const results = [];
+  for (const key of list.keys) {
+    const raw = await env.SHOP_DB.get(key.name);
+    if (!raw) continue;
+    const order = JSON.parse(raw);
+    const phone = String(order.phone || "");
+    const name = String(order.name || "").toLowerCase();
+    if (phone.includes(q) || name.includes(q)) results.push(order);
+  }
+  results.sort((a, b) => b.createdAt - a.createdAt);
+  return results.slice(0, 20);
+}
+
+async function beginOrderSearch(chatId, messageId, env) {
+  await env.SHOP_DB.put("state:" + chatId, "awaiting_order_search");
+  await editMessage(chatId, messageId, "شماره تماس یا نام مشتری رو بفرست تا سفارش‌هاش رو پیدا کنم (یا /start برای انصراف).", env);
+}
+
+async function runOrderSearch(query, chatId, env) {
+  const results = await searchOrders(query, env);
+  if (results.length === 0) {
+    await sendMessage(chatId, "سفارشی با «" + query + "» پیدا نشد.", env, [[{ text: "🏠 منو", callback_data: "menu" }]]);
+    return;
+  }
+  const keyboard = results.map((o) => ([{
+    text: "#" + o.ticketNumber + " — " + o.name + " (" + o.phone + ") — " + orderStatusLabel(o.status),
+    callback_data: "ordviewsearch:" + o.ticketNumber,
+  }]));
+  keyboard.push([{ text: "🏠 منو", callback_data: "menu" }]);
+  await sendMessage(chatId, "🔍 " + results.length + " سفارش پیدا شد:", env, keyboard);
 }
 
 async function handleCompleteOrder(chatId, messageId, ticketNumber, env) {
@@ -1076,6 +1195,8 @@ async function handleCompleteOrder(chatId, messageId, ticketNumber, env) {
 //  پشتیبان‌گیری (Backup)
 // ============================================================
 async function buildBackupPayload(env) {
+  // بک‌آپ کامل از کل محتوای سایت: محصولات، تنظیمات، سفارش‌ها، کاربران، علاقه‌مندی‌ها،
+  // کدهای تخفیف، تیکت‌های پشتیبانی و لیست همکاران ادمین
   const items = await getItems(env);
   const settings = await getSettings(env);
 
@@ -1086,11 +1207,40 @@ async function buildBackupPayload(env) {
     if (raw) orders.push(JSON.parse(raw));
   }
 
+  const users = await listRegisteredUsers(env);
+
+  const discountCodes = await getDiscountCodes(env);
+  const discounts = [];
+  for (const code of discountCodes) {
+    const d = await getDiscount(code, env);
+    if (d) discounts.push(d);
+  }
+
+  const favUsers = await getFavUsers(env);
+  const favorites = {};
+  for (const phone of favUsers) {
+    favorites[phone] = await getUserFavorites(phone, env);
+  }
+
+  const ticketKeys = await env.SHOP_DB.list({ prefix: "ticket:" });
+  const tickets = [];
+  for (const key of ticketKeys.keys) {
+    const raw = await env.SHOP_DB.get(key.name);
+    if (raw) tickets.push(JSON.parse(raw));
+  }
+
+  const coAdmins = await getCoAdmins(env);
+
   return {
     generatedAt: new Date().toISOString(),
     items: items,
     settings: settings,
     orders: orders,
+    users: users,
+    discounts: discounts,
+    favorites: favorites,
+    tickets: tickets,
+    coAdmins: coAdmins,
   };
 }
 
@@ -1104,9 +1254,13 @@ async function runBackup(env, sourceLabel) {
   await env.SHOP_DB.put("backup:latest", json);
 
   const filename = "reyhoon-backup-" + dateKey + ".json";
+  const caption =
+    "💾 بک‌آپ کامل سایت (" + (sourceLabel || "دستی") + ")\n" +
+    payload.items.length + " محصول، " + payload.orders.length + " سفارش، " +
+    (payload.users ? payload.users.length : 0) + " کاربر، " +
+    (payload.tickets ? payload.tickets.length : 0) + " تیکت";
   try {
-    await sendDocument(env.ADMIN_ID, json, filename,
-      "بک‌آپ " + (sourceLabel || "دستی") + " — " + payload.items.length + " محصول، " + payload.orders.length + " سفارش", env);
+    await sendDocument(env.ADMIN_ID, json, filename, caption, env);
   } catch (err) {
     // حتی اگه ارسال فایل به تلگرام خطا بده، نسخه‌ی KV ذخیره شده
   }
@@ -1304,6 +1458,31 @@ async function handleAdminMessage(msg, chatId, env, role) {
 }
 
 async function handlePendingState(state, msg, chatId, env) {
+  if (state.startsWith("awaiting_tracking:")) {
+    const parts = state.split(":");
+    const ticketNumber = parseInt(parts[1]);
+    const status = parts[2];
+    const page = parseInt(parts[3]) || 0;
+    const code = (msg.text || "").trim();
+    if (!code) {
+      await sendMessage(chatId, "لطفاً کد رهگیری پستی رو به‌صورت متن بفرست.", env);
+      return true;
+    }
+    await finishSetTracking(code, chatId, env, ticketNumber, status, page);
+    return true;
+  }
+
+  if (state === "awaiting_order_search") {
+    const query = (msg.text || "").trim();
+    if (!query) {
+      await sendMessage(chatId, "لطفاً شماره تماس یا نام رو بفرست.", env);
+      return true;
+    }
+    await env.SHOP_DB.delete("state:" + chatId);
+    await runOrderSearch(query, chatId, env);
+    return true;
+  }
+
   // مرحله عکس: تنها استثنایی که پیام متنی نیست. می‌تونه چند عکس پشت‌سرهم بگیره.
   if (state === "new_photo") {
     if (!msg.photo) {
@@ -1729,6 +1908,38 @@ async function handleCallbackQuery(cq, env) {
     const ticketNumber = parseInt(parts[2]);
     const page = parseInt(parts[3]) || 0;
     await editOrderDetailMessage(chatId, messageId, env, status, ticketNumber, page);
+    return;
+  }
+
+  if (data.startsWith("ordviewsearch:")) {
+    const ticketNumber = parseInt(data.split(":")[1]);
+    const raw = await env.SHOP_DB.get("order:" + ticketNumber);
+    const status = raw ? JSON.parse(raw).status : "pending";
+    await editOrderDetailMessage(chatId, messageId, env, status, ticketNumber, 0);
+    return;
+  }
+
+  if (data === "ordersearch") {
+    await beginOrderSearch(chatId, messageId, env);
+    return;
+  }
+
+  if (data.startsWith("settrack:")) {
+    const parts = data.split(":");
+    const ticketNumber = parseInt(parts[1]);
+    const status = parts[2];
+    const page = parseInt(parts[3]) || 0;
+    await beginSetTracking(chatId, messageId, env, ticketNumber, status, page);
+    return;
+  }
+
+  if (data === "report:daily") {
+    await sendMessage(chatId, await buildDailyReportText(env), env, [[{ text: "🏠 منو", callback_data: "menu" }]]);
+    return;
+  }
+
+  if (data === "report:weekly") {
+    await sendMessage(chatId, await buildWeeklyReportText(env), env, [[{ text: "🏠 منو", callback_data: "menu" }]]);
     return;
   }
 
@@ -2196,6 +2407,10 @@ function dashboardKeyboard(role) {
   if (level >= 3) row2.push({ text: "📊 آمار فروشگاه", callback_data: "stats" });
   if (row2.length) rows.push(row2);
 
+  if (level >= 3) {
+    rows.push([{ text: "📈 گزارش روزانه", callback_data: "report:daily" }, { text: "📈 گزارش هفتگی", callback_data: "report:weekly" }]);
+  }
+
   const row3 = [];
   if (level >= 3) row3.push({ text: "⚙️ تنظیمات اجرت", callback_data: "settings" });
   row3.push({ text: "🎫 تیکت‌های باز", callback_data: "tickets:0" });
@@ -2597,6 +2812,75 @@ async function buildStatsText(env) {
   });
 
   return text;
+}
+
+// ============================================================
+//  گزارش روزانه و هفتگی از کل محتوای سایت (سفارش‌ها، فروش، کاربران، تیکت‌ها)
+// ============================================================
+async function buildPeriodReportText(env, days, title) {
+  const since = Date.now() - days * 24 * 60 * 60 * 1000;
+
+  const orderKeys = await env.SHOP_DB.list({ prefix: "order:" });
+  let newOrders = 0, approvedOrders = 0, completedOrders = 0, rejectedOrders = 0, revenue = 0;
+  for (const key of orderKeys.keys) {
+    const raw = await env.SHOP_DB.get(key.name);
+    if (!raw) continue;
+    const order = JSON.parse(raw);
+    if (!order.createdAt || order.createdAt < since) continue;
+    newOrders += 1;
+    if (order.status === "in_progress") approvedOrders += 1;
+    if (order.status === "completed") { completedOrders += 1; revenue += order.total || 0; }
+    if (order.status === "rejected") rejectedOrders += 1;
+  }
+
+  const userKeys = await env.SHOP_DB.list({ prefix: "user:" });
+  let newUsers = 0;
+  for (const key of userKeys.keys) {
+    const raw = await env.SHOP_DB.get(key.name);
+    if (!raw) continue;
+    const user = JSON.parse(raw);
+    if (user.createdAt && user.createdAt >= since) newUsers += 1;
+  }
+
+  const ticketKeys = await env.SHOP_DB.list({ prefix: "ticket:" });
+  let newTickets = 0, openTickets = 0;
+  for (const key of ticketKeys.keys) {
+    const raw = await env.SHOP_DB.get(key.name);
+    if (!raw) continue;
+    const ticket = JSON.parse(raw);
+    if (ticket.createdAt && ticket.createdAt >= since) newTickets += 1;
+    if (ticket.status === "open") openTickets += 1;
+  }
+
+  const items = await getItems(env);
+  const outOfStock = items.filter((it) => typeof it.stock === "number" && it.stock <= 0).length;
+
+  let text = title + "\n\n";
+  text += "🧾 سفارش‌های جدید: " + newOrders + "\n";
+  text += "  در حال انجام: " + approvedOrders + " | تکمیل‌شده: " + completedOrders + " | رد‌شده: " + rejectedOrders + "\n";
+  text += "💰 فروش (سفارش‌های تکمیل‌شده): " + toToman(revenue) + " تومان\n\n";
+  text += "👤 کاربران جدید: " + newUsers + "\n";
+  text += "🎫 تیکت‌های جدید: " + newTickets + " | تیکت‌های باز الان: " + openTickets + "\n\n";
+  text += "📦 کل محصولات: " + items.length + " | ناموجود: " + outOfStock;
+
+  return text;
+}
+
+async function buildDailyReportText(env) {
+  return buildPeriodReportText(env, 1, "📅 گزارش روزانه ریحون گلد گالری");
+}
+
+async function buildWeeklyReportText(env) {
+  return buildPeriodReportText(env, 7, "🗓 گزارش هفتگی ریحون گلد گالری");
+}
+
+async function sendScheduledReport(env, kind) {
+  const text = kind === "weekly" ? await buildWeeklyReportText(env) : await buildDailyReportText(env);
+  try {
+    await notifyAdmins(env, 3, text);
+  } catch (err) {
+    // خطای ارسال گزارش نباید بقیه کارهای زمان‌بندی‌شده رو متوقف کنه
+  }
 }
 
 // ============================================================

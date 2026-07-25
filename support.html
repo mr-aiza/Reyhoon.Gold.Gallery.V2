@@ -1,0 +1,274 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>پشتیبانی | ریحون گلد گالری</title>
+<meta name="description" content="با پشتیبانی ریحون گلد گالری در ارتباط باشید و پیگیر تیکت‌های خودتون بمونید.">
+<link rel="preconnect" href="https://cdnjs.cloudflare.com">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/vazirmatn/33.0.3/Vazirmatn-font-face.css" rel="stylesheet">
+<link rel="stylesheet" href="assets/styles.css">
+<style>
+  .support-wrap{ max-width:560px; margin:0 auto; padding:0 20px 80px; }
+  .support-card{ background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-xl); overflow:hidden; }
+
+  /* ---- فرم شروع تیکت ---- */
+  #startBox{ padding:24px; display:flex; flex-direction:column; gap:var(--sp-4); }
+  #startBox select{
+    width:100%; background:var(--bg-card-2); border:1px solid var(--border); border-radius:var(--radius-md);
+    color:inherit; padding:12px 14px; font-family:inherit; font-size:14px;
+  }
+
+  /* ---- چت تیکت ---- */
+  #chatBox{ display:none; flex-direction:column; height:520px; }
+  .chat-head{ display:flex; justify-content:space-between; align-items:center; padding:16px 20px; border-bottom:1px solid var(--border); }
+  .chat-head .ticket-id{ font-size:13px; color:var(--text-dim); }
+  .chat-status{ font-size:12px; font-weight:600; padding:4px 10px; border-radius:999px; }
+  .chat-status.open{ background:rgba(122,148,113,0.18); color:var(--green-light); }
+  .chat-status.closed{ background:rgba(176,107,86,0.18); color:var(--red-light); }
+  .chat-log{ flex:1; overflow-y:auto; padding:16px 20px; display:flex; flex-direction:column; gap:10px; }
+  .bubble{ max-width:80%; padding:10px 14px; border-radius:var(--radius-md); font-size:14px; line-height:1.9; }
+  .bubble.customer{ align-self:flex-start; background:var(--bg-card-2); }
+  .bubble.admin{ align-self:flex-end; background:rgba(201,162,39,0.15); color:var(--gold-light); }
+  .bubble .t{ display:block; font-size:10px; color:var(--text-dim); margin-top:4px; }
+  .chat-input-row{ display:flex; gap:8px; padding:14px 20px; border-top:1px solid var(--border); }
+  .chat-input-row input{
+    flex:1; background:var(--bg-card-2); border:1px solid var(--border); border-radius:var(--radius-md);
+    color:inherit; padding:11px 14px; font-family:inherit; font-size:14px;
+  }
+  .chat-input-row button{
+    background:var(--gold); color:var(--bg); border:none; border-radius:var(--radius-md);
+    padding:0 18px; font-weight:600; cursor:pointer; font-family:inherit;
+  }
+  .chat-input-row button:disabled{ opacity:0.5; cursor:not-allowed; }
+  .closed-note{ padding:14px 20px; text-align:center; font-size:13px; color:var(--text-dim); border-top:1px solid var(--border); }
+  .closed-note button{ margin-top:8px; }
+  .support-empty{ text-align:center; padding:40px 20px; color:var(--text-dim); }
+</style>
+</head>
+<body>
+
+<div id="siteHeaderRoot"></div>
+
+<div class="breadcrumb"><a href="index.html">صفحه اصلی</a> / پشتیبانی</div>
+
+<section class="page-hero">
+  <div class="container">
+    <h1>پشتیبانی</h1>
+    <p>سوالی درباره سفارش یا محصولات داری؟ پیامت مستقیم برای تیم ما ارسال می‌شه و همینجا جواب می‌گیری.</p>
+  </div>
+</section>
+
+<div class="support-wrap">
+  <div class="support-card">
+
+    <div id="startBox">
+      <div id="startMsg" class="auth-msg" style="font-size:13px;"></div>
+      <div class="field" id="fieldSName">
+        <label for="sName">نام</label>
+        <input type="text" id="sName" placeholder="نام شما">
+      </div>
+      <div class="field" id="fieldSType">
+        <label for="sType">موضوع</label>
+        <select id="sType">
+          <option value="سوال محصول">سوال درباره محصول</option>
+          <option value="پیگیری سفارش">پیگیری سفارش</option>
+          <option value="مشکل فنی سایت">مشکل فنی سایت</option>
+          <option value="سایر">سایر</option>
+        </select>
+      </div>
+      <div class="field" id="fieldSMsg">
+        <label for="sMsg">پیام شما</label>
+        <textarea id="sMsg" rows="4" placeholder="پیامت رو اینجا بنویس..."></textarea>
+        <div class="field-error">لطفاً پیامت رو بنویس</div>
+      </div>
+      <button class="checkout-submit" id="startSubmit">ارسال به پشتیبانی</button>
+    </div>
+
+    <div id="chatBox">
+      <div class="chat-head">
+        <span class="ticket-id" id="chatTicketId"></span>
+        <span class="chat-status" id="chatStatus"></span>
+      </div>
+      <div class="chat-log" id="chatLog"></div>
+      <div class="chat-input-row" id="chatInputRow">
+        <input type="text" id="chatInput" placeholder="پیامت رو بنویس...">
+        <button id="chatSend">ارسال</button>
+      </div>
+      <div class="closed-note" id="closedNote" style="display:none;">
+        این تیکت بسته شده.
+        <br>
+        <button class="link-ghost" id="newTicketBtn">شروع گفتگوی جدید</button>
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>window.PAGE_MODE = "full";</script>
+<script src="assets/auth.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(function(){
+  const STORAGE_KEY = "reyhoon_ticket_id";
+  const startBox = document.getElementById("startBox");
+  const chatBox = document.getElementById("chatBox");
+  const chatLog = document.getElementById("chatLog");
+  const chatStatus = document.getElementById("chatStatus");
+  const chatTicketId = document.getElementById("chatTicketId");
+  const chatInputRow = document.getElementById("chatInputRow");
+  const closedNote = document.getElementById("closedNote");
+
+  let pollTimer = null;
+  let lastMessageCount = 0;
+
+  function apiBase(){
+    return (window.ORDERS_API_URL || "");
+  }
+
+  function formatTime(ts){
+    try { return new Date(ts).toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" }); }
+    catch(e){ return ""; }
+  }
+
+  function renderMessages(messages){
+    chatLog.innerHTML = messages.map(m => `
+      <div class="bubble ${m.from === "admin" ? "admin" : "customer"}">
+        ${escapeHtml(m.text)}
+        <span class="t">${m.from === "admin" ? "پشتیبانی" : "شما"} — ${formatTime(m.time)}</span>
+      </div>`).join("");
+    chatLog.scrollTop = chatLog.scrollHeight;
+  }
+
+  function escapeHtml(str){
+    const div = document.createElement("div");
+    div.textContent = str;
+    return div.innerHTML;
+  }
+
+  function showChat(ticketId){
+    startBox.style.display = "none";
+    chatBox.style.display = "flex";
+    chatTicketId.textContent = "تیکت #" + ticketId;
+  }
+
+  async function pollTicket(ticketId){
+    try{
+      const res = await fetch(`${apiBase()}/api/ticket/poll?ticketId=${encodeURIComponent(ticketId)}`);
+      if(!res.ok){
+        if(res.status === 404){
+          localStorage.removeItem(STORAGE_KEY);
+          resetToStart("این تیکت پیدا نشد. یه گفتگوی جدید شروع کن.");
+        }
+        return;
+      }
+      const data = await res.json();
+      renderMessages(data.messages || []);
+      const isOpen = data.status === "open";
+      chatStatus.textContent = isOpen ? "باز" : "بسته‌شده";
+      chatStatus.className = "chat-status " + (isOpen ? "open" : "closed");
+      chatInputRow.style.display = isOpen ? "flex" : "none";
+      closedNote.style.display = isOpen ? "none" : "block";
+    } catch(err){
+      // خطای شبکه موقت؛ پول بعدی دوباره امتحان می‌کنه
+    }
+  }
+
+  function startPolling(ticketId){
+    if(pollTimer) clearInterval(pollTimer);
+    pollTicket(ticketId);
+    pollTimer = setInterval(() => pollTicket(ticketId), 5000);
+  }
+
+  function resetToStart(msg){
+    if(pollTimer) clearInterval(pollTimer);
+    chatBox.style.display = "none";
+    startBox.style.display = "flex";
+    if(msg){
+      const el = document.getElementById("startMsg");
+      el.textContent = msg;
+      el.className = "auth-msg show error";
+    }
+  }
+
+  // ---- اگه تیکت باز قبلی داریم، مستقیم بریم رو چت ----
+  const existingTicketId = localStorage.getItem(STORAGE_KEY);
+  if(existingTicketId){
+    showChat(existingTicketId);
+    startPolling(existingTicketId);
+  }
+
+  // ---- پرکردن خودکار نام از حساب کاربری ----
+  if(window.ReyhoonAuth && window.ReyhoonAuth.isLoggedIn()){
+    const user = window.ReyhoonAuth.getUser();
+    if(user && user.name) document.getElementById("sName").value = user.name;
+  }
+
+  document.getElementById("startSubmit").addEventListener("click", async () => {
+    const name = document.getElementById("sName").value.trim() || "کاربر سایت";
+    const type = document.getElementById("sType").value;
+    const msgField = document.getElementById("sMsg");
+    const message = msgField.value.trim();
+
+    const msgOk = message.length >= 3;
+    document.getElementById("fieldSMsg").classList.toggle("invalid", !msgOk);
+    if(!msgOk) return;
+
+    const btn = document.getElementById("startSubmit");
+    btn.disabled = true;
+    btn.textContent = "در حال ارسال...";
+    try{
+      const res = await fetch(`${apiBase()}/api/ticket`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, type, message }),
+      });
+      const data = await res.json();
+      if(!res.ok || !data.ticketId) throw new Error(data.error || "ثبت تیکت ناموفق بود.");
+      localStorage.setItem(STORAGE_KEY, data.ticketId);
+      showChat(data.ticketId);
+      startPolling(data.ticketId);
+    } catch(err){
+      const el = document.getElementById("startMsg");
+      el.textContent = err.message || "مشکلی پیش اومد، دوباره امتحان کن.";
+      el.className = "auth-msg show error";
+    } finally {
+      btn.disabled = false;
+      btn.textContent = "ارسال به پشتیبانی";
+    }
+  });
+
+  async function sendChatMessage(){
+    const input = document.getElementById("chatInput");
+    const message = input.value.trim();
+    if(!message) return;
+    const ticketId = localStorage.getItem(STORAGE_KEY);
+    if(!ticketId) return;
+    input.value = "";
+    try{
+      await fetch(`${apiBase()}/api/ticket/message`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ ticketId, message }),
+      });
+      pollTicket(ticketId);
+    } catch(err){
+      // اگه ارسال خطا بده، پیام تو اینپوت برنمی‌گرده؛ کاربر می‌تونه دوباره بنویسه
+    }
+  }
+
+  document.getElementById("chatSend").addEventListener("click", sendChatMessage);
+  document.getElementById("chatInput").addEventListener("keydown", (e) => {
+    if(e.key === "Enter") sendChatMessage();
+  });
+
+  document.getElementById("newTicketBtn").addEventListener("click", () => {
+    localStorage.removeItem(STORAGE_KEY);
+    document.getElementById("sMsg").value = "";
+    resetToStart("");
+    document.getElementById("startMsg").className = "auth-msg";
+  });
+})();
+</script>
+</body>
+</html>

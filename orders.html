@@ -67,6 +67,9 @@
       const invoiceHtml = (o.status === "approved" || o.status === "in_progress" || o.status === "completed")
         ? `<a class="link-ghost" href="invoice.html?ticket=${o.ticketNumber}" target="_blank" style="display:block;text-align:center;margin-top:10px;">🧾 دانلود فاکتور</a>`
         : "";
+      const trackingHtml = o.trackingCode
+        ? `<div class="order-total" style="border-top:none;padding-top:0;"><span>🚚 کد رهگیری پستی</span><span class="num">${o.trackingCode}</span></div>`
+        : "";
       return `
         <div class="order-card">
           <div class="order-head">
@@ -76,6 +79,7 @@
           <div class="order-date">${formatDate(o.createdAt)}</div>
           <div class="order-items">${itemsHtml}</div>
           <div class="order-total"><span>جمع کل</span><span class="num">${toToman(o.total)} تومان</span></div>
+          ${trackingHtml}
           ${invoiceHtml}
         </div>`;
     }).join("");
