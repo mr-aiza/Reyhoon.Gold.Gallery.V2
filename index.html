@@ -252,11 +252,22 @@
           <input type="tel" id="ckPhone" placeholder="09xxxxxxxxx" inputmode="numeric">
           <div class="field-error">شماره تماس معتبر وارد کنید</div>
         </div>
+        <div class="field" id="fieldEmail">
+          <label for="ckEmail">ایمیل</label>
+          <input type="email" id="ckEmail" placeholder="example@mail.com">
+          <div class="field-error">ایمیل معتبر وارد کنید</div>
+        </div>
+        <div class="field" id="fieldPostalCode">
+          <label for="ckPostalCode">کد پستی</label>
+          <input type="text" id="ckPostalCode" placeholder="۱۰ رقمی" inputmode="numeric" maxlength="10">
+          <div class="field-error">کد پستی ۱۰ رقمی رو وارد کنید</div>
+        </div>
         <div class="field" id="fieldAddress">
           <label for="ckAddress">آدرس تحویل</label>
           <textarea id="ckAddress" rows="2" placeholder="شهر، خیابان، پلاک..."></textarea>
           <div class="field-error">آدرس رو وارد کنید</div>
         </div>
+        <p style="font-size:12px;color:var(--text-dim);margin:-4px 0 4px;">پرداخت به‌صورت آنلاین فعلاً فعال نیست؛ سفارش شما ثبت می‌شه و برای هماهنگی پرداخت باهاتون تماس می‌گیریم. بعد از ارسال، کد رهگیری پستی مرسوله رو همینجا (صفحه پیگیری سفارش‌ها) می‌بینید.</p>
         <button class="checkout-submit" id="checkoutSubmit">ثبت سفارش و ارسال به تلگرام</button>
       </div>
     </div>
