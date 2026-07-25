@@ -397,17 +397,30 @@ footer{ border-top:1px solid var(--border); margin-top:40px; }
 
 /* ===== Checkout modal ===== */
 .checkout-modal .lightbox-inner{ max-width:400px; }
-.checkout-form{ padding:24px; display:flex; flex-direction:column; gap:var(--sp-4); }
+/* این استایل‌ها روی هر فرمی با کلاس .checkout-form اعمال می‌شن؛ #startBox (فرم شروع تیکت پشتیبانی)
+   هم چون از همون ساختار .field/label/input/select/textarea استفاده می‌کنه، اینجا اضافه شده —
+   باگ قبلی این بود که این سلکتورها فقط مخصوص .checkout-form بودن و #startBox هیچ استایلی نداشت. */
+.checkout-form, #startBox{ padding:24px; display:flex; flex-direction:column; gap:var(--sp-4); }
 .checkout-form h3{ font-size:16px; font-weight:600; margin-bottom:var(--sp-1); }
-.checkout-form label{ font-size:12px; color:var(--text-dim); margin-bottom:6px; display:block; }
-.checkout-form input, .checkout-form textarea{
+.checkout-form label, #startBox label{ font-size:12px; color:var(--text-dim); margin-bottom:6px; display:block; }
+.checkout-form input, .checkout-form textarea, .checkout-form select,
+#startBox input, #startBox textarea, #startBox select{
   width:100%; background:var(--bg-card-2); border:1px solid var(--border); border-radius:var(--radius-sm);
   padding:10px 12px; color:var(--cream); font-family:inherit; font-size:13px;
 }
-.checkout-form input:focus, .checkout-form textarea:focus{ border-color:var(--gold); }
-.checkout-form .field-error{ font-size:11px; color:var(--red-light); margin-top:4px; display:none; }
-.checkout-form .field.invalid .field-error{ display:block; }
-.checkout-form .field.invalid input, .checkout-form .field.invalid textarea{ border-color:var(--red-light); }
+.checkout-form input:focus, .checkout-form textarea:focus, .checkout-form select:focus,
+#startBox input:focus, #startBox textarea:focus, #startBox select:focus{ border-color:var(--gold); }
+.checkout-form .field-error, #startBox .field-error{ font-size:11px; color:var(--red-light); margin-top:4px; display:none; }
+.checkout-form .field.invalid .field-error, #startBox .field.invalid .field-error{ display:block; }
+.checkout-form .field.invalid input, .checkout-form .field.invalid textarea,
+#startBox .field.invalid input, #startBox .field.invalid textarea{ border-color:var(--red-light); }
+
+/* پیام وضعیت فرم (موفقیت/خطا) — قبلاً فقط داخل account.html به‌صورت لوکال تعریف شده بود؛
+   تو support.html اصلاً وجود نداشت (برای همین بی‌استایل بود). الان سراسری شد. */
+.auth-msg{ font-size:13px; margin-top:-4px; display:none; }
+.auth-msg.show{ display:block; }
+.auth-msg.error{ color:var(--red-light); }
+.auth-msg.success{ color:var(--gold); }
 .checkout-summary{ background:var(--bg-card-2); border-radius:var(--radius-md); padding:14px; font-size:13px; display:flex; justify-content:space-between; color:var(--text-dim); }
 .checkout-summary .v{ color:var(--gold); font-weight:600; }
 .checkout-submit{ background:var(--gold); color:var(--bg); border-radius:var(--radius-md); padding:13px; font-weight:500; font-size:14px; text-align:center; transition:background .2s; }

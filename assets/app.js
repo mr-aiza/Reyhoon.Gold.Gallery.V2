@@ -930,24 +930,29 @@
   const stepForm = document.getElementById("checkoutStepForm");
   const stepSuccess = document.getElementById("checkoutStepSuccess");
 
-  function openCheckout(){
+  function fillShippingFields(user){
+    const phoneInput = document.getElementById("ckPhone");
+    if(phoneInput && !phoneInput.value && user && user.phone) phoneInput.value = user.phone;
+    const shipping = user && user.shipping;
+    if(shipping){
+      const nameInput = document.getElementById("ckName");
+      const emailInput = document.getElementById("ckEmail");
+      const postalInput = document.getElementById("ckPostalCode");
+      const addressInput = document.getElementById("ckAddress");
+      if(nameInput && !nameInput.value && shipping.name) nameInput.value = shipping.name;
+      if(emailInput && !emailInput.value && shipping.email) emailInput.value = shipping.email;
+      if(postalInput && !postalInput.value && shipping.postalCode) postalInput.value = shipping.postalCode;
+      if(addressInput && !addressInput.value && shipping.address) addressInput.value = shipping.address;
+    }
+  }
+
+  async function openCheckout(){
     if(cart.length === 0 || !checkoutModal) return;
     document.getElementById("checkoutTotal").textContent = toToman(cartFinalTotal()) + " تومان";
     if(window.ReyhoonAuth && window.ReyhoonAuth.isLoggedIn()){
-      const user = window.ReyhoonAuth.getUser();
-      const phoneInput = document.getElementById("ckPhone");
-      if(phoneInput && !phoneInput.value && user && user.phone) phoneInput.value = user.phone;
-      const shipping = user && user.shipping;
-      if(shipping){
-        const nameInput = document.getElementById("ckName");
-        const emailInput = document.getElementById("ckEmail");
-        const postalInput = document.getElementById("ckPostalCode");
-        const addressInput = document.getElementById("ckAddress");
-        if(nameInput && !nameInput.value && shipping.name) nameInput.value = shipping.name;
-        if(emailInput && !emailInput.value && shipping.email) emailInput.value = shipping.email;
-        if(postalInput && !postalInput.value && shipping.postalCode) postalInput.value = shipping.postalCode;
-        if(addressInput && !addressInput.value && shipping.address) addressInput.value = shipping.address;
-      }
+      // اول با چیزی که تو کش لوکاله فرم رو پر کن (سریع)، بعد از سرور تازه‌ش کن (برای سشن‌های قدیمی)
+      fillShippingFields(window.ReyhoonAuth.getUser());
+      window.ReyhoonAuth.refreshUser().then(fillShippingFields);
     }
     stepForm.style.display = "block";
     stepSuccess.style.display = "none";

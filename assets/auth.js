@@ -61,7 +61,7 @@
       method: "POST",
       body: JSON.stringify({ phone, password, name }),
     });
-    saveSession(data.token, { phone: data.phone, name: data.name });
+    saveSession(data.token, { phone: data.phone, name: data.name, shipping: data.shipping || null });
     return data;
   }
 
@@ -70,7 +70,7 @@
       method: "POST",
       body: JSON.stringify({ phone, password }),
     });
-    saveSession(data.token, { phone: data.phone, name: data.name });
+    saveSession(data.token, { phone: data.phone, name: data.name, shipping: data.shipping || null });
     return data;
   }
 
@@ -79,5 +79,20 @@
     clearSession();
   }
 
-  window.ReyhoonAuth = { getToken, getUser, isLoggedIn, saveSession, clearSession, apiFetch, register, login, logout };
+  // آخرین مشخصات کاربر (از جمله shipping که بعد از هر سفارش روی سرور آپدیت می‌شه) رو می‌گیره
+  // و کش لوکال رو تازه می‌کنه. صفحاتی مثل checkout/account باید این رو موقع لود صدا بزنن،
+  // وگرنه اگه کاربر از یه سشن قدیمی لاگین مونده باشه، آخرین آدرس/ایمیلش رو نمی‌بینه.
+  async function refreshUser() {
+    if (!getToken()) return null;
+    try {
+      const data = await apiFetch("/api/auth/me", { method: "GET" });
+      const token = getToken();
+      saveSession(token, { phone: data.phone, name: data.name, shipping: data.shipping || null });
+      return getUser();
+    } catch (e) {
+      return getUser();
+    }
+  }
+
+  window.ReyhoonAuth = { getToken, getUser, isLoggedIn, saveSession, clearSession, apiFetch, register, login, logout, refreshUser };
 })();
