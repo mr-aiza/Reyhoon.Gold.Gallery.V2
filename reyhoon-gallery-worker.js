@@ -13,22 +13,46 @@ const PAGE_SIZE = 5;
 
 const DEFAULT_SETTINGS = { fee18: 20, fee24: 4 };
 
+// تبدیل ارقام فارسی (۰-۹) و عربی (٠-٩) به انگلیسی، چون کیبورد فارسی موبایل پیش‌فرض
+// این ارقام رو می‌فرسته و parseFloat/parseInt انگلیسی نمی‌فهمتشون (NaN می‌ده و بی‌صدا رد می‌شه)
+function normalizeDigits(str) {
+  return String(str)
+    .replace(/[۰-۹]/g, (d) => "۰۱۲۳۴۵۶۷۸۹".indexOf(d))
+    .replace(/[٠-٩]/g, (d) => "٠١٢٣٤٥٦٧٨٩".indexOf(d))
+    .replace(/[,٬،]/g, "") // جداکننده هزارگان
+    .trim();
+}
+
 // آدرس سایت فروشگاه (برای ساخت لینک فاکتور که تو تلگرام فرستاده می‌شه) — اینو با دامنه واقعی سایتت جایگزین کن
 const SITE_URL = "https://reyhoongoldgallery.pages.dev";
 
 // ============================================================
-//  همکاران ادمین و سطوح دسترسی
-//  سطوح: orders (۱) < products (۲) < full (۳) < owner (۴)
+//  همکاران ادمین و قابلیت‌های دسترسی (تک‌تک، قابل فعال/غیرفعال‌سازی)
 // ============================================================
-const ROLE_LABEL = {
-  orders: "سفارش‌ها و تیکت‌ها",
-  products: "محصولات + سفارش‌ها",
-  full: "کامل (بجز حذف محصول و مدیریت همکاران)",
-  owner: "مالک",
+const PERM_LABEL = {
+  orders: "🎫 سفارش‌ها و تیکت‌ها",
+  products: "✏️ افزودن/ویرایش محصول",
+  delete_product: "🗑 حذف محصول",
+  discounts: "🏷 کدهای تخفیف",
+  settings: "⚙️ تنظیمات اجرت",
+  stats: "📊 آمار فروشگاه",
+  backup: "💾 بک‌آپ",
+  manage_admins: "👥 مدیریت همکاران",
 };
+const PERM_ORDER = ["orders", "products", "delete_product", "discounts", "settings", "stats", "backup", "manage_admins"];
+const DEFAULT_NEW_PERMS = ["orders"]; // پیش‌فرض وقتی همکار جدید اضافه می‌شه
 
-function roleLevel(role) {
-  return { orders: 1, products: 2, full: 3, owner: 4 }[role] || 0;
+// role می‌تونه یکی از این‌ها باشه: "owner" (رشته) | آرایه‌ای از perm ها | null (بدون دسترسی)
+function hasPerm(role, perm) {
+  if (!perm) return !!role; // فقط لازمه یه سطح دسترسی (هرچی) داشته باشه
+  if (role === "owner") return true;
+  if (!role) return false;
+  return role.includes(perm);
+}
+
+function permsLabel(perms) {
+  if (!perms || !perms.length) return "بدون قابلیت فعال";
+  return perms.map((p) => PERM_LABEL[p] || p).join("، ");
 }
 
 async function getCoAdmins(env) {
@@ -40,26 +64,32 @@ async function saveCoAdmins(list, env) {
   await env.SHOP_DB.put("co_admins", JSON.stringify(list));
 }
 
+// تبدیل ساختار قدیمی (role تکی) به آرایه perms، برای همکارهایی که قبل از این آپدیت اضافه شدن
+function migrateOldRole(role) {
+  if (role === "products") return ["orders", "products"];
+  if (role === "full") return ["orders", "products", "discounts", "settings", "stats", "backup"];
+  return ["orders"]; // role === "orders" یا نامشخص
+}
+
+// خروجی: "owner" یا آرایه perms یا null
 async function getAdminRole(chatId, env) {
   chatId = String(chatId);
   if (chatId === String(env.ADMIN_ID)) return "owner";
   const list = await getCoAdmins(env);
   const found = list.find((a) => String(a.chatId) === chatId);
-  return found ? found.role : null;
+  if (!found) return null;
+  if (found.perms) return found.perms;
+  return migrateOldRole(found.role); // هنوز فرمت قدیمی داره، تا وقتی از /addadmin دوباره ثبت بشه
 }
 
-// حداقل سطح لازم برای هر دکمه/اکشن پنل — پیش‌فرض ۱ (پایین‌ترین سطح: سفارش‌ها) برای هرچیزی که اینجا لیست نشده
-function callbackRequiredLevel(data) {
-  if (data.startsWith("del:") || data.startsWith("delmenu:") || data === "admins" || data.startsWith("deladmin:")) {
-    return 4; // فقط مالک: حذف محصول، مدیریت همکاران
-  }
-  if (
-    data === "settings" || data.startsWith("setfee:") ||
-    data === "discounts" || data === "newcode" || data.startsWith("disctype:") || data.startsWith("delcode:") ||
-    data === "stats" || data === "favstats" || data === "dobackup"
-  ) {
-    return 3; // سطح کامل
-  }
+// قابلیت لازم برای هر دکمه/اکشن پنل — null یعنی فقط داشتن هر نوع دسترسی کافیه (منو، لیست، تیکت‌ها، تایید/رد سفارش)
+function callbackRequiredPerm(data) {
+  if (data.startsWith("del:") || data.startsWith("delmenu:")) return "delete_product";
+  if (data === "admins" || data.startsWith("deladmin:") || data.startsWith("ap:") || data === "apconfirm" || data === "apcancel") return "manage_admins";
+  if (data === "settings" || data.startsWith("setfee:")) return "settings";
+  if (data === "discounts" || data === "newcode" || data.startsWith("disctype:") || data.startsWith("delcode:")) return "discounts";
+  if (data === "stats" || data === "favstats") return "stats";
+  if (data === "dobackup") return "backup";
   if (
     data === "newitem" || data === "newitem_cancel" || data === "newitem_confirm" || data === "newitem_like" ||
     data === "newphoto_done" || data === "addhelp" ||
@@ -69,20 +99,28 @@ function callbackRequiredLevel(data) {
     data.startsWith("delimg:") || data.startsWith("newcat:") || data.startsWith("newkarat:") ||
     data.startsWith("newbadge:") || data.startsWith("newfeatured:") || data.startsWith("newfee:")
   ) {
-    return 2; // سطح محصولات
+    return "products";
   }
-  return 1; // سطح سفارش‌ها (و هرچیز عمومی/ناوبری مثل منو، لیست، تیکت‌ها، تایید/رد سفارش)
+  return null; // عمومی/ناوبری
 }
 
-async function handleAddAdminCommand(text, chatId, env) {
+function buildPermToggleKeyboard(targetId, perms) {
+  const rows = PERM_ORDER.map((p) => [{
+    text: (perms.includes(p) ? "✅ " : "☐ ") + PERM_LABEL[p],
+    callback_data: "ap:" + p,
+  }]);
+  rows.push([{ text: "✔️ تایید و افزودن همکار", callback_data: "apconfirm" }]);
+  rows.push([{ text: "انصراف", callback_data: "apcancel" }]);
+  return rows;
+}
+
+async function startAddAdminFlow(text, chatId, env) {
   const parts = text.trim().split(/\s+/);
   const targetId = parts[1];
-  const role = parts[2];
-  const validRoles = ["orders", "products", "full"];
-  if (!targetId || !/^\d+$/.test(targetId) || !validRoles.includes(role)) {
+  if (!targetId || !/^\d+$/.test(targetId)) {
     await sendMessage(
       chatId,
-      "فرمت درست نیست. اینجوری بفرست:\n/addadmin <chat_id> <role>\n\nrole یکی از این‌ها:\norders (فقط سفارش‌ها و تیکت‌ها)\nproducts (محصولات + سفارش‌ها)\nfull (همه‌چی بجز حذف محصول و مدیریت همکاران)\n\nمثال:\n/addadmin 123456789 products\n\n(همکارت باید اول تو همین ربات /whoami رو بزنه تا chat id خودش رو بگیره و بهت بده)",
+      "فرمت درست نیست. اینجوری بفرست:\n/addadmin <chat_id>\n\nمثال:\n/addadmin 123456789\n\nبعدش قابلیت‌هایی که می‌خوای براش فعال بشه رو تک‌تک از روی دکمه‌ها انتخاب می‌کنی.\n\n(همکارت باید اول تو همین ربات /whoami رو بزنه تا chat id خودش رو بگیره و بهت بده)",
       env
     );
     return;
@@ -93,22 +131,55 @@ async function handleAddAdminCommand(text, chatId, env) {
   }
   const list = await getCoAdmins(env);
   const existing = list.find((a) => String(a.chatId) === targetId);
-  if (existing) {
-    existing.role = role;
-  } else {
-    list.push({ chatId: targetId, role, addedAt: Date.now() });
-  }
-  await saveCoAdmins(list, env);
+  const perms = existing ? [...(existing.perms || migrateOldRole(existing.role))] : [...DEFAULT_NEW_PERMS];
+  await env.SHOP_DB.put("addadmindraft:" + chatId, JSON.stringify({ targetId, perms }));
   await sendMessage(
     chatId,
-    "✅ همکار با آیدی " + targetId + " با سطح دسترسی «" + ROLE_LABEL[role] + "» اضافه شد.",
+    (existing ? "ویرایش قابلیت‌های همکار " : "قابلیت‌های همکار جدید ") + targetId + " رو انتخاب کن (با زدن هرکدوم فعال/غیرفعال می‌شه):",
+    env,
+    buildPermToggleKeyboard(targetId, perms)
+  );
+}
+
+async function handleAddAdminToggle(chatId, messageId, perm, env) {
+  const raw = await env.SHOP_DB.get("addadmindraft:" + chatId);
+  if (!raw) return;
+  const draft = JSON.parse(raw);
+  const idx = draft.perms.indexOf(perm);
+  if (idx >= 0) draft.perms.splice(idx, 1);
+  else draft.perms.push(perm);
+  await env.SHOP_DB.put("addadmindraft:" + chatId, JSON.stringify(draft));
+  await editMessage(
+    chatId, messageId,
+    "قابلیت‌های همکار " + draft.targetId + " رو انتخاب کن (با زدن هرکدوم فعال/غیرفعال می‌شه):",
+    env,
+    buildPermToggleKeyboard(draft.targetId, draft.perms)
+  );
+}
+
+async function handleAddAdminConfirm(chatId, messageId, env) {
+  const raw = await env.SHOP_DB.get("addadmindraft:" + chatId);
+  if (!raw) return;
+  const draft = JSON.parse(raw);
+  const list = await getCoAdmins(env);
+  const existing = list.find((a) => String(a.chatId) === draft.targetId);
+  if (existing) {
+    existing.perms = draft.perms;
+  } else {
+    list.push({ chatId: draft.targetId, perms: draft.perms, addedAt: Date.now() });
+  }
+  await saveCoAdmins(list, env);
+  await env.SHOP_DB.delete("addadmindraft:" + chatId);
+  await editMessage(
+    chatId, messageId,
+    "✅ همکار " + draft.targetId + " با این قابلیت‌ها ثبت شد:\n" + permsLabel(draft.perms),
     env,
     [[{ text: "👥 لیست همکاران", callback_data: "admins" }]]
   );
   try {
     await sendMessage(
-      targetId,
-      "سلام! دسترسی مدیریت به فروشگاه ریحون گلد گالری برات فعال شد.\nسطح دسترسی: " + ROLE_LABEL[role] + "\n\nبرای شروع /start رو بزن.",
+      draft.targetId,
+      "سلام! دسترسی مدیریت به فروشگاه ریحون گلد گالری برات فعال شد.\nقابلیت‌های فعال: " + permsLabel(draft.perms) + "\n\nبرای شروع /start رو بزن.",
       env
     );
   } catch (err) {
@@ -118,11 +189,11 @@ async function handleAddAdminCommand(text, chatId, env) {
 
 async function sendAdminList(chatId, messageId, env) {
   const list = await getCoAdmins(env);
-  const rows = list.map((a) => [{ text: "🗑 " + a.chatId + " — " + (ROLE_LABEL[a.role] || a.role), callback_data: "deladmin:" + a.chatId }]);
+  const rows = list.map((a) => [{ text: "🗑 " + a.chatId + " — " + permsLabel(a.perms || migrateOldRole(a.role)), callback_data: "deladmin:" + a.chatId }]);
   rows.push([{ text: "« بازگشت", callback_data: "menu" }]);
   const text = list.length
-    ? "👥 همکاران فعلی:\nبرای حذف روی هرکدوم بزن.\n\nبرای افزودن همکار جدید:\n/addadmin <chat_id> <role>\nrole: orders / products / full"
-    : "هنوز همکاری اضافه نکردی.\n\nبرای افزودن:\n/addadmin <chat_id> <role>\nrole: orders / products / full\n\n(همکارت اول باید تو ربات /whoami رو بزنه تا chat id خودش رو بگیره)";
+    ? "👥 همکاران فعلی:\nبرای حذف روی هرکدوم بزن.\n\nبرای افزودن همکار جدید یا ویرایش قابلیت‌ها:\n/addadmin <chat_id>"
+    : "هنوز همکاری اضافه نکردی.\n\nبرای افزودن:\n/addadmin <chat_id>\n\n(همکارت اول باید تو ربات /whoami رو بزنه تا chat id خودش رو بگیره)";
   if (messageId) await editMessage(chatId, messageId, text, env, rows);
   else await sendMessage(chatId, text, env, rows);
 }
@@ -445,7 +516,7 @@ async function handleNewOrder(request, env) {
     "جمع کل: " + toToman(total) + " تومان";
 
   try {
-    await notifyAdmins(env, 1, message, [
+    await notifyAdmins(env, "orders", message, [
       [{ text: "✅ تایید سفارش", callback_data: "apporder:" + ticketNumber }, { text: "❌ رد سفارش", callback_data: "rejorder:" + ticketNumber }],
     ]);
   } catch (err) {
@@ -912,11 +983,11 @@ function answerCallback(callbackQueryId, env, text) {
 }
 
 // ارسال پیام به مالک + هر همکاری که سطح دسترسیش کافیه (برای سفارش/تیکت جدید)
-async function notifyAdmins(env, minLevel, text, keyboard) {
+async function notifyAdmins(env, perm, text, keyboard) {
   const recipients = [String(env.ADMIN_ID)];
   const coAdmins = await getCoAdmins(env);
   for (const a of coAdmins) {
-    if (roleLevel(a.role) >= minLevel) recipients.push(String(a.chatId));
+    if (hasPerm(a.perms || migrateOldRole(a.role), perm)) recipients.push(String(a.chatId));
   }
   for (const chatId of recipients) {
     try {
@@ -973,7 +1044,7 @@ async function handleAdminMessage(msg, chatId, env, role) {
   }
 
   if (msg.photo && msg.caption) {
-    if (roleLevel(role) < 2) {
+    if (!hasPerm(role, "products")) {
       await sendMessage(chatId, "⛔️ برای افزودن محصول دسترسی لازم رو نداری.", env);
       return;
     }
@@ -997,8 +1068,8 @@ async function handleAdminMessage(msg, chatId, env, role) {
   }
 
   if (msg.text && msg.text.startsWith("/delete")) {
-    if (role !== "owner") {
-      await sendMessage(chatId, "⛔️ حذف محصول فقط برای مالک فروشگاهه.", env);
+    if (!hasPerm(role, "delete_product")) {
+      await sendMessage(chatId, "⛔️ برای حذف محصول دسترسی لازم رو نداری.", env);
       return;
     }
     await handleDeleteCommand(msg.text, chatId, env);
@@ -1011,7 +1082,7 @@ async function handleAdminMessage(msg, chatId, env, role) {
   }
 
   if (msg.text === "/backup") {
-    if (roleLevel(role) < 3) {
+    if (!hasPerm(role, "backup")) {
       await sendMessage(chatId, "⛔️ دسترسی لازم برای این کار رو نداری.", env);
       return;
     }
@@ -1021,17 +1092,17 @@ async function handleAdminMessage(msg, chatId, env, role) {
   }
 
   if (msg.text && msg.text.startsWith("/addadmin")) {
-    if (role !== "owner") {
-      await sendMessage(chatId, "⛔️ مدیریت همکاران فقط برای مالک فروشگاهه.", env);
+    if (!hasPerm(role, "manage_admins")) {
+      await sendMessage(chatId, "⛔️ دسترسی مدیریت همکاران رو نداری.", env);
       return;
     }
-    await handleAddAdminCommand(msg.text, chatId, env);
+    await startAddAdminFlow(msg.text, chatId, env);
     return;
   }
 
   if (msg.text === "/admins") {
-    if (role !== "owner") {
-      await sendMessage(chatId, "⛔️ مدیریت همکاران فقط برای مالک فروشگاهه.", env);
+    if (!hasPerm(role, "manage_admins")) {
+      await sendMessage(chatId, "⛔️ دسترسی مدیریت همکاران رو نداری.", env);
       return;
     }
     await sendAdminList(chatId, null, env);
@@ -1117,7 +1188,7 @@ async function handlePendingState(state, msg, chatId, env) {
   }
 
   if (state === "new_weight") {
-    const val = parseFloat(msg.text);
+    const val = parseFloat(normalizeDigits(msg.text));
     if (isNaN(val)) {
       await sendMessage(chatId, "عدد نامعتبره. وزن رو به گرم بفرست (مثلاً 4.2):", env, cancelKeyboard());
       return true;
@@ -1151,7 +1222,7 @@ async function handlePendingState(state, msg, chatId, env) {
   }
 
   if (state === "new_fee_manual") {
-    const val = parseFloat(msg.text);
+    const val = parseFloat(normalizeDigits(msg.text));
     if (isNaN(val)) {
       await sendMessage(chatId, "عدد نامعتبره. درصد اجرت رو بفرست:", env, cancelKeyboard());
       return true;
@@ -1169,7 +1240,7 @@ async function handlePendingState(state, msg, chatId, env) {
   if (state.startsWith("await_fee_")) {
     await env.SHOP_DB.delete("state:" + chatId);
     const key = state.replace("await_fee_", "");
-    const val = parseFloat(msg.text);
+    const val = parseFloat(normalizeDigits(msg.text));
     if (isNaN(val)) {
       await sendMessage(chatId, "عدد نامعتبره. دوباره از منوی تنظیمات تلاش کن.", env, [[{ text: "⚙️ تنظیمات اجرت", callback_data: "settings" }]]);
       return true;
@@ -1217,7 +1288,7 @@ async function handlePendingState(state, msg, chatId, env) {
 
   if (state === "disc_value") {
     const draft = await getDiscDraft(chatId, env);
-    const val = parseFloat(msg.text);
+    const val = parseFloat(normalizeDigits(msg.text));
     const invalid = isNaN(val) || val <= 0 || (draft.type === "percent" && val > 100);
     if (invalid) {
       await sendMessage(
@@ -1394,8 +1465,8 @@ async function handleCallbackQuery(cq, env) {
 
   await answerCallback(cq.id, env);
 
-  const required = callbackRequiredLevel(data);
-  if (roleLevel(role) < required) {
+  const required = callbackRequiredPerm(data);
+  if (!hasPerm(role, required)) {
     await editMessage(chatId, messageId, "⛔️ دسترسی لازم برای این کار رو نداری.", env, [[{ text: "🏠 منو", callback_data: "menu" }]]);
     return;
   }
@@ -1426,6 +1497,22 @@ async function handleCallbackQuery(cq, env) {
     const targetId = data.slice("deladmin:".length);
     const list = await getCoAdmins(env);
     await saveCoAdmins(list.filter((a) => String(a.chatId) !== targetId), env);
+    await sendAdminList(chatId, messageId, env);
+    return;
+  }
+
+  if (data.startsWith("ap:")) {
+    await handleAddAdminToggle(chatId, messageId, data.slice("ap:".length), env);
+    return;
+  }
+
+  if (data === "apconfirm") {
+    await handleAddAdminConfirm(chatId, messageId, env);
+    return;
+  }
+
+  if (data === "apcancel") {
+    await env.SHOP_DB.delete("addadmindraft:" + chatId);
     await sendAdminList(chatId, messageId, env);
     return;
   }
@@ -1777,39 +1864,38 @@ async function handleCallbackQuery(cq, env) {
 const DASHBOARD_TEXT = "پنل مدیریت گالری طلا 🏆\nیکی از گزینه‌ها رو انتخاب کن:";
 
 function dashboardKeyboard(role) {
-  const level = roleLevel(role);
   const rows = [];
 
-  if (level >= 2) {
+  if (hasPerm(role, "products")) {
     rows.push([{ text: "📋 لیست محصولات", callback_data: "list:0" }, { text: "✏️ ویرایش محصول", callback_data: "editmenu:0" }]);
   } else {
     rows.push([{ text: "📋 لیست محصولات", callback_data: "list:0" }]);
   }
 
   const row2 = [];
-  if (role === "owner") row2.push({ text: "🗑 حذف محصول", callback_data: "delmenu:0" });
-  if (level >= 3) row2.push({ text: "📊 آمار فروشگاه", callback_data: "stats" });
+  if (hasPerm(role, "delete_product")) row2.push({ text: "🗑 حذف محصول", callback_data: "delmenu:0" });
+  if (hasPerm(role, "stats")) row2.push({ text: "📊 آمار فروشگاه", callback_data: "stats" });
   if (row2.length) rows.push(row2);
 
   const row3 = [];
-  if (level >= 3) row3.push({ text: "⚙️ تنظیمات اجرت", callback_data: "settings" });
+  if (hasPerm(role, "settings")) row3.push({ text: "⚙️ تنظیمات اجرت", callback_data: "settings" });
   row3.push({ text: "🎫 تیکت‌های باز", callback_data: "tickets:0" });
   rows.push(row3);
 
-  if (level >= 3) {
+  if (hasPerm(role, "discounts")) {
     rows.push([{ text: "🏷 کدهای تخفیف", callback_data: "discounts" }]);
   }
 
   const row5 = [];
-  if (level >= 2) row5.push({ text: "➕ افزودن محصول جدید", callback_data: "newitem" });
-  if (level >= 3) row5.push({ text: "💾 بک‌آپ فوری", callback_data: "dobackup" });
+  if (hasPerm(role, "products")) row5.push({ text: "➕ افزودن محصول جدید", callback_data: "newitem" });
+  if (hasPerm(role, "backup")) row5.push({ text: "💾 بک‌آپ فوری", callback_data: "dobackup" });
   if (row5.length) rows.push(row5);
 
-  if (level >= 2) {
+  if (hasPerm(role, "products")) {
     rows.push([{ text: "📖 روش سریع (عکس+کپشن)", callback_data: "addhelp" }]);
   }
 
-  if (role === "owner") {
+  if (hasPerm(role, "manage_admins")) {
     rows.push([{ text: "👥 مدیریت همکاران", callback_data: "admins" }]);
   }
 
@@ -1863,7 +1949,7 @@ async function handleNewItem(msg, env) {
   const settings = await getSettings(env);
   const nextId = await getNextId(env);
 
-  const karatVal = parseInt(fields.karat);
+  const karatVal = parseInt(normalizeDigits(fields.karat));
   const defaultFee = karatVal === 24 ? settings.fee24 : settings.fee18;
   const featuredVal = fields.featured ? /^(بله|yes|true|1)$/i.test(fields.featured.trim()) : false;
 
@@ -1873,9 +1959,9 @@ async function handleNewItem(msg, env) {
     category: fields.category,
     model: fields.model || null,
     karat: karatVal,
-    weight: parseFloat(fields.weight),
-    stock: fields.stock ? (parseInt(fields.stock, 10) || 0) : 0,
-    makingFee: fields.fee ? parseFloat(fields.fee) : defaultFee,
+    weight: parseFloat(normalizeDigits(fields.weight)),
+    stock: fields.stock ? (parseInt(normalizeDigits(fields.stock), 10) || 0) : 0,
+    makingFee: fields.fee ? parseFloat(normalizeDigits(fields.fee)) : defaultFee,
     badge: fields.badge || null,
     featured: featuredVal,
     rating: 4.7,
@@ -2047,13 +2133,13 @@ async function handleEditValueInput(state, msg, chatId, env) {
 
   let value;
   if (field === "weight" || field === "fee") {
-    value = parseFloat(raw);
+    value = parseFloat(normalizeDigits(raw));
     if (isNaN(value)) {
       await sendMessage(chatId, "عدد نامعتبره. دوباره امتحان کن:", env, [[{ text: "انصراف", callback_data: "edit:" + id }]]);
       return true;
     }
   } else if (field === "stock") {
-    value = parseInt(raw, 10);
+    value = parseInt(normalizeDigits(raw), 10);
     if (isNaN(value) || value < 0) {
       await sendMessage(chatId, "عدد نامعتبره. تعداد موجودی رو به‌صورت عدد صحیح بفرست:", env, [[{ text: "انصراف", callback_data: "edit:" + id }]]);
       return true;
@@ -2219,7 +2305,7 @@ async function closeTicket(id, env) {
 async function notifyAdminNewTicketMessage(ticket, env) {
   const lastMsg = ticket.messages[ticket.messages.length - 1];
   const text = "🎫 تیکت #" + ticket.id + " از " + (ticket.name || "کاربر سایت") + "\n\n" + lastMsg.text;
-  await notifyAdmins(env, 1, text, [[{ text: "پاسخ", callback_data: "reply:" + ticket.id }, { text: "بستن تیکت", callback_data: "closetick:" + ticket.id }]]);
+  await notifyAdmins(env, "orders", text, [[{ text: "پاسخ", callback_data: "reply:" + ticket.id }, { text: "بستن تیکت", callback_data: "closetick:" + ticket.id }]]);
 }
 
 async function handleCreateTicket(request, env) {
