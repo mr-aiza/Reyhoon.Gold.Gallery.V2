@@ -45,6 +45,10 @@
     <div class="auth-account" id="authAccountBox">
       <div class="name" id="authAccountName"></div>
       <div class="phone" id="authAccountPhone"></div>
+      <div id="authShippingBox" style="display:none; text-align:right; font-size:13px; color:var(--text-dim); background:var(--bg-card-2); border-radius:var(--radius-md); padding:14px; line-height:2;">
+        <div style="color:var(--text-dim); font-size:12px; margin-bottom:4px;">آخرین مشخصات ارسالی که ثبت کردی (تو سفارش بعدی خودکار پر می‌شه):</div>
+        <div id="authShippingText"></div>
+      </div>
       <a class="checkout-submit" href="orders.html" style="display:block;">پیگیری سفارش‌ها</a>
       <a class="link-ghost" href="favorites.html" style="display:block;">❤️ علاقه‌مندی‌های من</a>
       <button class="link-ghost" id="logoutBtn">خروج از حساب</button>
@@ -110,12 +114,31 @@
     });
   });
 
+  function renderShipping(user){
+    const box = document.getElementById("authShippingBox");
+    const txt = document.getElementById("authShippingText");
+    const s = user && user.shipping;
+    if(!s || (!s.email && !s.postalCode && !s.address)){
+      box.style.display = "none";
+      return;
+    }
+    txt.innerHTML = [
+      s.email ? "📧 " + s.email : "",
+      s.postalCode ? "📮 کدپستی: " + s.postalCode : "",
+      s.address ? "📍 " + s.address : "",
+    ].filter(Boolean).join("<br>");
+    box.style.display = "block";
+  }
+
   function showAccountView(){
     const user = window.ReyhoonAuth.getUser();
     document.getElementById("authTabsWrap").style.display = "none";
     document.getElementById("authAccountBox").classList.add("active");
     document.getElementById("authAccountName").textContent = (user && user.name) ? user.name : "کاربر ریحون گلد گالری";
     document.getElementById("authAccountPhone").textContent = user ? user.phone : "";
+    renderShipping(user);
+    // کش لوکال ممکنه قدیمی باشه (مثلاً قبل از این آپدیت لاگین کرده)؛ از سرور تازه‌ش کن
+    window.ReyhoonAuth.refreshUser().then(renderShipping);
   }
 
   function showFormsView(){
