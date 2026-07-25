@@ -738,12 +738,18 @@
 
   function renderCart(){
     const badge = document.getElementById("cartBadge");
-    if(!badge) return; // این صفحه سبد نداره
-    const totalQty = cart.reduce((sum, l) => sum + l.qty, 0);
-    badge.style.display = totalQty ? "flex" : "none";
-    badge.textContent = totalQty;
+    if(badge){
+      const totalQty = cart.reduce((sum, l) => sum + l.qty, 0);
+      badge.style.display = totalQty ? "flex" : "none";
+      badge.textContent = totalQty;
+    }
 
     const list = document.getElementById("cartList");
+    // این صفحه پنل سبد رو نداره (مثلاً account.html/support.html/orders.html) —
+    // نشان تعداد رو بالا آپدیت کردیم، همین کافیه، ادامه نده. قبلاً اینجا کرش می‌کرد
+    // و چون renderCart() تو توالی راه‌اندازی اولیه قبل از fetchLivePrice/fetchGallery
+    // صدا زده می‌شه، اون کرش باعث می‌شد قیمت طلا و داده‌های سرور اصلاً لود نشن.
+    if(!list) return;
     const empty = document.getElementById("cartEmpty");
     const footer = document.getElementById("cartFooter");
     const undoWrap = document.getElementById("undoWrap");
