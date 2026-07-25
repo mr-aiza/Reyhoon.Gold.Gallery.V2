@@ -198,6 +198,26 @@ nav.main-nav a:hover, nav.main-nav a.active{ color:var(--gold); }
   background:rgba(122,132,113,0.2); color:var(--green-light); padding:2px 8px; border-radius:999px;
 }
 .product-badge.featured{ background:rgba(201,168,76,0.2); color:var(--gold-light); }
+.fav-btn{
+  position:absolute; top:12px; left:12px; z-index:2; width:32px; height:32px; border-radius:50%;
+  background:rgba(20,26,20,0.55); backdrop-filter:blur(2px); color:#fff; display:flex; align-items:center; justify-content:center;
+  transition:color .2s, transform .15s, background .2s;
+}
+.fav-btn:hover{ transform:scale(1.08); background:rgba(20,26,20,0.75); }
+.fav-btn.active{ color:#C9642E; }
+.lightbox-body .fav-btn{
+  position:static; width:auto; height:auto; display:inline-flex; margin-inline-start:var(--sp-3);
+  background:transparent; color:var(--text-dim); vertical-align:middle;
+}
+.lightbox-body .fav-btn.active{ color:#C9642E; }
+.fav-toast{
+  position:fixed; left:50%; bottom:24px; transform:translateX(-50%) translateY(20px); z-index:200;
+  background:var(--bg-card-2); border:1px solid var(--border); border-radius:var(--radius-md);
+  padding:12px 18px; font-size:13px; color:var(--text-dim); opacity:0; pointer-events:none; transition:opacity .2s, transform .2s;
+  box-shadow:0 8px 24px rgba(0,0,0,0.3);
+}
+.fav-toast.show{ opacity:1; transform:translateX(-50%) translateY(0); pointer-events:auto; }
+.fav-toast a{ color:var(--gold); font-weight:600; }
 .product-info{ padding:var(--sp-4); }
 .product-name{ font-size:14px; font-weight:500; margin-bottom:var(--sp-2); }
 .product-meta{ display:flex; align-items:center; gap:var(--sp-1); margin-bottom:var(--sp-3); font-size:11px; color:var(--text-dim); }
