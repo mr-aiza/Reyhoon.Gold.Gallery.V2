@@ -336,6 +336,28 @@ footer{ border-top:1px solid var(--border); margin-top:40px; }
 
 .cart-total{ border-top:1px solid var(--border); margin-top:var(--sp-5); padding-top:var(--sp-4); display:flex; justify-content:space-between; font-weight:600; }
 .cart-total .v{ color:var(--gold); }
+.discount-row{ display:flex; gap:8px; margin-top:var(--sp-4); }
+.discount-row input{
+  flex:1; background:var(--bg-card-2); border:1px solid var(--border); border-radius:var(--radius-sm);
+  padding:9px 12px; font-size:13px; color:var(--cream); font-family:inherit;
+}
+.discount-row input:focus{ outline:none; border-color:var(--gold); }
+.discount-row button{
+  font-size:12px; border:1px solid rgba(201,168,76,0.4); color:var(--gold); border-radius:var(--radius-sm);
+  padding:0 16px; white-space:nowrap; transition:all .2s;
+}
+.discount-row button:hover{ background:var(--gold); color:var(--bg); }
+.discount-error{ font-size:11px; color:var(--red-light); margin-top:6px; display:none; }
+.discount-error.show{ display:block; }
+.discount-applied{
+  display:none; align-items:center; justify-content:space-between; gap:8px; margin-top:var(--sp-4);
+  background:rgba(122,148,113,0.12); border:1px solid rgba(122,148,113,0.3); border-radius:var(--radius-sm);
+  padding:8px 12px; font-size:12px; color:var(--green-light);
+}
+.discount-applied.show{ display:flex; }
+.discount-applied button{ color:var(--text-dim); font-size:11px; }
+.discount-applied button:hover{ color:var(--red-light); }
+.discount-line{ display:flex; justify-content:space-between; font-size:12px; color:var(--green-light); margin-top:var(--sp-2); }
 .cart-weight-note{ font-size:11px; color:var(--text-dim); margin-top:var(--sp-1); text-align:left; }
 .checkout-btn{
   width:100%; background:var(--gold); color:var(--bg); border-radius:var(--radius-md);

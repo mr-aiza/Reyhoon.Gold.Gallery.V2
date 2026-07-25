@@ -134,6 +134,7 @@
   let pricePerGram = 38450000;
   let history = Array.from({length:24}, (_,i) => 38450000 + Math.sin(i/3)*80000 + i*4000);
   let cart = [];
+  let appliedDiscount = null; // { code, type, value, label }
   let favoriteIds = new Set();
   let activeCategory = "همه";
   let activeKarat = "همه";
@@ -719,6 +720,13 @@
 
   function cartTotal(){ return cart.reduce((sum, l) => sum + productPrice(l.product) * l.qty, 0); }
   function cartTotalWeight(){ return cart.reduce((sum, l) => sum + l.product.weight * l.qty, 0); }
+  function currentDiscountAmount(){
+    if(!appliedDiscount) return 0;
+    const subtotal = cartTotal();
+    if(appliedDiscount.type === "percent") return Math.round(subtotal * appliedDiscount.value / 100);
+    return Math.min(appliedDiscount.value, subtotal);
+  }
+  function cartFinalTotal(){ return Math.max(0, cartTotal() - currentDiscountAmount()); }
 
   function renderCart(){
     const badge = document.getElementById("cartBadge");
@@ -736,6 +744,7 @@
       list.innerHTML = "";
       empty.style.display = "flex";
       footer.style.display = "none";
+      appliedDiscount = null;
       saveCart();
       return;
     }
@@ -791,10 +800,82 @@
       });
     });
 
-    document.getElementById("cartTotalVal").textContent = toToman(cartTotal()) + " تومان";
+    document.getElementById("cartTotalVal").textContent = toToman(cartFinalTotal()) + " تومان";
     const weightNote = document.getElementById("cartWeightNote");
     if(weightNote) weightNote.textContent = "وزن کل: " + cartTotalWeight().toFixed(2) + " گرم";
+    renderDiscountUI();
     saveCart();
+  }
+
+  // ---------- Discount code ----------
+  function renderDiscountUI(){
+    const row = document.getElementById("discountRow");
+    const applied = document.getElementById("discountApplied");
+    const line = document.getElementById("discountLine");
+    const lineVal = document.getElementById("discountLineVal");
+    if(!row || !applied) return;
+    if(appliedDiscount){
+      row.style.display = "none";
+      applied.classList.add("show");
+      document.getElementById("discountAppliedText").textContent = "کد «" + appliedDiscount.code + "» — " + appliedDiscount.label;
+      if(line){ line.style.display = "flex"; lineVal.textContent = "- " + toToman(currentDiscountAmount()) + " تومان"; }
+    } else {
+      row.style.display = "flex";
+      applied.classList.remove("show");
+      if(line) line.style.display = "none";
+    }
+  }
+
+  function showDiscountError(text){
+    const el = document.getElementById("discountError");
+    if(!el) return;
+    el.textContent = text;
+    el.classList.add("show");
+  }
+  function clearDiscountError(){
+    const el = document.getElementById("discountError");
+    if(el){ el.textContent = ""; el.classList.remove("show"); }
+  }
+
+  const applyDiscountBtn = document.getElementById("applyDiscountBtn");
+  if(applyDiscountBtn){
+    applyDiscountBtn.addEventListener("click", async () => {
+      const input = document.getElementById("discountInput");
+      const code = (input.value || "").trim();
+      clearDiscountError();
+      if(!code) return;
+      if(!GALLERY_API_URL) return;
+      applyDiscountBtn.disabled = true;
+      applyDiscountBtn.textContent = "...";
+      try{
+        const res = await fetch(`${GALLERY_API_URL}/api/discount/check`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ code, subtotal: cartTotal() }),
+        });
+        const data = await res.json();
+        if(data.valid){
+          appliedDiscount = { code: data.code, type: data.type, value: data.value, label: data.label };
+          input.value = "";
+          renderCart();
+        } else {
+          showDiscountError(data.error || "کد تخفیف معتبر نیست.");
+        }
+      } catch(err){
+        showDiscountError("مشکلی پیش اومد، دوباره تلاش کن.");
+      } finally {
+        applyDiscountBtn.disabled = false;
+        applyDiscountBtn.textContent = "اعمال";
+      }
+    });
+  }
+
+  const removeDiscountBtn = document.getElementById("removeDiscountBtn");
+  if(removeDiscountBtn){
+    removeDiscountBtn.addEventListener("click", () => {
+      appliedDiscount = null;
+      renderCart();
+    });
   }
 
   function removeFromCart(idx){
@@ -843,7 +924,7 @@
 
   function openCheckout(){
     if(cart.length === 0 || !checkoutModal) return;
-    document.getElementById("checkoutTotal").textContent = toToman(cartTotal()) + " تومان";
+    document.getElementById("checkoutTotal").textContent = toToman(cartFinalTotal()) + " تومان";
     if(window.ReyhoonAuth && window.ReyhoonAuth.isLoggedIn()){
       const user = window.ReyhoonAuth.getUser();
       const phoneInput = document.getElementById("ckPhone");
@@ -896,6 +977,7 @@
       }));
 
       const lines = cart.map(l => `- ${l.product.name} (${karatLabel(l.product.karat)}، ${l.product.weight} گرم) × ${l.qty} — ${toToman(productPrice(l.product)*l.qty)} تومان`).join("\n");
+      const discountText = appliedDiscount ? `\nکد تخفیف: ${appliedDiscount.code} (-${toToman(currentDiscountAmount())} تومان)` : "";
       const message =
 `سفارش جدید از ریحون گلد گالری
 نام: ${name}
@@ -904,8 +986,8 @@
 
 اقلام:
 ${lines}
-
-جمع کل: ${toToman(cartTotal())} تومان`;
+${discountText}
+جمع کل: ${toToman(cartFinalTotal())} تومان`;
 
       const tgLink = `https://t.me/${SHOP_TELEGRAM_USERNAME}?text=${encodeURIComponent(message)}`;
       document.getElementById("checkoutTelegramLink").href = tgLink;
@@ -923,7 +1005,12 @@ ${lines}
           const res = await fetch(`${ORDERS_API_URL}/api/order`, {
             method: "POST",
             headers,
-            body: JSON.stringify({ name, phone, address, items: orderItems, total: cartTotal() }),
+            body: JSON.stringify({
+              name, phone, address, items: orderItems,
+              subtotal: cartTotal(),
+              discountCode: appliedDiscount ? appliedDiscount.code : undefined,
+              total: cartFinalTotal(),
+            }),
           });
           if(res.ok){
             const data = await res.json();
