@@ -89,6 +89,16 @@
     </div>
     <div id="cartList" class="cart-list"></div>
     <div id="cartFooter" style="display:none;">
+      <div class="discount-row" id="discountRow">
+        <input type="text" id="discountInput" placeholder="کد تخفیف">
+        <button id="applyDiscountBtn">اعمال</button>
+      </div>
+      <div class="discount-error" id="discountError"></div>
+      <div class="discount-applied" id="discountApplied">
+        <span id="discountAppliedText"></span>
+        <button id="removeDiscountBtn">حذف</button>
+      </div>
+      <div class="discount-line" id="discountLine" style="display:none;"><span>تخفیف</span><span id="discountLineVal"></span></div>
       <div class="cart-total"><span>جمع کل</span><span class="v num" id="cartTotalVal">0 تومان</span></div>
       <div class="cart-weight-note num" id="cartWeightNote"></div>
       <button class="checkout-btn" id="checkoutBtn">ادامه فرایند خرید</button>

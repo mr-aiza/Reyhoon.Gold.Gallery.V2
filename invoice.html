@@ -1,0 +1,187 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>فاکتور سفارش | ریحون گلد گالری</title>
+<link rel="preconnect" href="https://cdnjs.cloudflare.com">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/vazirmatn/33.0.3/Vazirmatn-font-face.css" rel="stylesheet">
+<style>
+  :root{
+    --gold:#C9A24C; --gold-light:#E0C27A; --ink:#1B1B1B; --dim:#6b6b6b; --border:#e2ddd0; --bg-soft:#faf8f3;
+  }
+  *{ box-sizing:border-box; }
+  body{
+    font-family:"Vazirmatn", Tahoma, sans-serif; margin:0; background:#efece4; color:var(--ink);
+    -webkit-font-smoothing:antialiased;
+  }
+  .toolbar{
+    max-width:760px; margin:0 auto; padding:16px 20px 0; display:flex; justify-content:flex-end; gap:10px;
+  }
+  .toolbar button, .toolbar a{
+    background:var(--gold); color:#fff; border:none; border-radius:8px; padding:10px 20px; font-family:inherit;
+    font-size:14px; cursor:pointer; text-decoration:none; display:inline-flex; align-items:center; gap:6px;
+  }
+  .toolbar button:hover, .toolbar a:hover{ background:var(--gold-light); }
+  .sheet{
+    max-width:760px; margin:16px auto 60px; background:#fff; border:1px solid var(--border); border-radius:10px;
+    padding:40px 44px; box-shadow:0 10px 30px rgba(0,0,0,0.08);
+  }
+  .head{ display:flex; justify-content:space-between; align-items:flex-start; border-bottom:2px solid var(--gold); padding-bottom:20px; margin-bottom:24px; }
+  .head h1{ margin:0; font-size:22px; color:var(--ink); }
+  .head .sub{ font-size:12px; color:var(--dim); margin-top:4px; }
+  .ticket-box{ text-align:left; }
+  .ticket-box .num{ font-size:20px; font-weight:700; color:var(--gold); }
+  .ticket-box .status{ display:inline-block; margin-top:6px; font-size:12px; background:rgba(122,148,113,0.15); color:#4f7a44; padding:3px 10px; border-radius:999px; }
+  .info-grid{ display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-bottom:28px; }
+  .info-block{ background:var(--bg-soft); border-radius:8px; padding:14px 16px; }
+  .info-block .label{ font-size:11px; color:var(--dim); margin-bottom:4px; }
+  .info-block .value{ font-size:14px; font-weight:600; }
+  table{ width:100%; border-collapse:collapse; margin-bottom:20px; }
+  th, td{ text-align:right; padding:10px 8px; font-size:13px; border-bottom:1px solid var(--border); }
+  th{ color:var(--dim); font-weight:600; font-size:12px; }
+  td.num, th.num{ text-align:left; }
+  .totals{ margin-right:auto; width:280px; }
+  .totals .row{ display:flex; justify-content:space-between; font-size:13px; padding:6px 0; }
+  .totals .row.discount{ color:#4f7a44; }
+  .totals .row.grand{ font-size:16px; font-weight:700; border-top:2px solid var(--gold); padding-top:10px; margin-top:6px; }
+  .foot-note{ margin-top:32px; font-size:11px; color:var(--dim); text-align:center; border-top:1px dashed var(--border); padding-top:16px; }
+  .state{ text-align:center; padding:60px 20px; color:var(--dim); }
+  @media print{
+    body{ background:#fff; }
+    .toolbar{ display:none; }
+    .sheet{ box-shadow:none; border:none; margin:0; max-width:none; }
+    @page{ size:A4; margin:16mm; }
+  }
+</style>
+</head>
+<body>
+
+<div class="toolbar" id="toolbar" style="display:none;">
+  <button id="printBtn">🖨 دانلود / چاپ PDF</button>
+</div>
+
+<div id="root">
+  <div class="state">در حال بارگذاری فاکتور...</div>
+</div>
+
+<script src="assets/auth.js"></script>
+<script>
+(function(){
+  const GALLERY_API_URL = "https://reyhoongoldgallery.tempmail41245.workers.dev";
+  const root = document.getElementById("root");
+  const toolbar = document.getElementById("toolbar");
+  const STATUS_LABEL = { pending: "در انتظار بررسی", approved: "تایید شده", rejected: "رد شده" };
+
+  function toToman(n){ return Math.round(n).toLocaleString("fa-IR"); }
+  function formatDate(ts){
+    try { return new Date(ts).toLocaleDateString("fa-IR", { year:"numeric", month:"long", day:"numeric" }); }
+    catch(e){ return ""; }
+  }
+
+  function showError(msg){
+    root.innerHTML = `<div class="state">${msg}</div>`;
+  }
+
+  function render(order){
+    const itemsRows = order.items.map(it => `
+      <tr>
+        <td>${it.name}</td>
+        <td>${it.karat} عیار</td>
+        <td>${it.weight} گرم</td>
+        <td class="num">${it.qty}</td>
+        <td class="num">${toToman(it.unitPrice)} تومان</td>
+        <td class="num">${toToman(it.unitPrice * it.qty)} تومان</td>
+      </tr>`).join("");
+
+    const subtotal = order.subtotal || order.total;
+    const discountRow = order.discount
+      ? `<div class="row discount"><span>تخفیف (${order.discount.code})</span><span>- ${toToman(order.discount.discountAmount)} تومان</span></div>`
+      : "";
+
+    root.innerHTML = `
+      <div class="sheet">
+        <div class="head">
+          <div>
+            <h1>ریحون گلد گالری</h1>
+            <div class="sub">فاکتور فروش</div>
+          </div>
+          <div class="ticket-box">
+            <div class="num">سفارش #${order.ticketNumber}</div>
+            <div class="status">${STATUS_LABEL[order.status] || order.status}</div>
+          </div>
+        </div>
+
+        <div class="info-grid">
+          <div class="info-block">
+            <div class="label">نام خریدار</div>
+            <div class="value">${order.name}</div>
+          </div>
+          <div class="info-block">
+            <div class="label">شماره تماس</div>
+            <div class="value">${order.phone}</div>
+          </div>
+          <div class="info-block" style="grid-column:1/-1;">
+            <div class="label">آدرس</div>
+            <div class="value">${order.address}</div>
+          </div>
+          <div class="info-block">
+            <div class="label">تاریخ ثبت سفارش</div>
+            <div class="value">${formatDate(order.createdAt)}</div>
+          </div>
+        </div>
+
+        <table>
+          <thead>
+            <tr>
+              <th>محصول</th><th>عیار</th><th>وزن</th><th class="num">تعداد</th><th class="num">قیمت واحد</th><th class="num">جمع</th>
+            </tr>
+          </thead>
+          <tbody>${itemsRows}</tbody>
+        </table>
+
+        <div class="totals">
+          <div class="row"><span>جمع اقلام</span><span>${toToman(subtotal)} تومان</span></div>
+          ${discountRow}
+          <div class="row grand"><span>مبلغ نهایی</span><span>${toToman(order.total)} تومان</span></div>
+        </div>
+
+        <div class="foot-note">این فاکتور به‌صورت خودکار از سایت ریحون گلد گالری صادر شده است.</div>
+      </div>`;
+
+    toolbar.style.display = "flex";
+  }
+
+  async function init(){
+    const params = new URLSearchParams(location.search);
+    const ticket = params.get("ticket");
+    const token = params.get("token");
+    if(!ticket){ showError("شماره سفارش مشخص نیست."); return; }
+
+    let url = `${GALLERY_API_URL}/api/invoice?ticket=${encodeURIComponent(ticket)}`;
+    if(token) url += `&token=${encodeURIComponent(token)}`;
+
+    const headers = {};
+    if(window.ReyhoonAuth && window.ReyhoonAuth.getToken()){
+      headers["Authorization"] = "Bearer " + window.ReyhoonAuth.getToken();
+    }
+
+    try{
+      const res = await fetch(url, { headers });
+      const data = await res.json();
+      if(!res.ok || data.error){
+        showError(data.error || "فاکتور در دسترس نیست.");
+        return;
+      }
+      render(data.order);
+    } catch(err){
+      showError("مشکلی پیش اومد: " + err.message);
+    }
+  }
+
+  document.getElementById("printBtn").addEventListener("click", () => window.print());
+  init();
+})();
+</script>
+</body>
+</html>

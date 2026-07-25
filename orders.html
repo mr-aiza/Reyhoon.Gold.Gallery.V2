@@ -62,6 +62,9 @@
     }
     wrap.innerHTML = orders.map(o => {
       const itemsHtml = o.items.map(it => `${it.name} (${it.karat} عیار، ${it.weight} گرم) × ${it.qty}`).join("<br>");
+      const invoiceHtml = o.status === "approved"
+        ? `<a class="link-ghost" href="invoice.html?ticket=${o.ticketNumber}" target="_blank" style="display:block;text-align:center;margin-top:10px;">🧾 دانلود فاکتور</a>`
+        : "";
       return `
         <div class="order-card">
           <div class="order-head">
@@ -71,6 +74,7 @@
           <div class="order-date">${formatDate(o.createdAt)}</div>
           <div class="order-items">${itemsHtml}</div>
           <div class="order-total"><span>جمع کل</span><span class="num">${toToman(o.total)} تومان</span></div>
+          ${invoiceHtml}
         </div>`;
     }).join("");
   }

@@ -13,6 +13,120 @@ const PAGE_SIZE = 5;
 
 const DEFAULT_SETTINGS = { fee18: 20, fee24: 4 };
 
+// آدرس سایت فروشگاه (برای ساخت لینک فاکتور که تو تلگرام فرستاده می‌شه) — اینو با دامنه واقعی سایتت جایگزین کن
+const SITE_URL = "https://reyhoongoldgallery.pages.dev";
+
+// ============================================================
+//  همکاران ادمین و سطوح دسترسی
+//  سطوح: orders (۱) < products (۲) < full (۳) < owner (۴)
+// ============================================================
+const ROLE_LABEL = {
+  orders: "سفارش‌ها و تیکت‌ها",
+  products: "محصولات + سفارش‌ها",
+  full: "کامل (بجز حذف محصول و مدیریت همکاران)",
+  owner: "مالک",
+};
+
+function roleLevel(role) {
+  return { orders: 1, products: 2, full: 3, owner: 4 }[role] || 0;
+}
+
+async function getCoAdmins(env) {
+  const raw = await env.SHOP_DB.get("co_admins");
+  return raw ? JSON.parse(raw) : [];
+}
+
+async function saveCoAdmins(list, env) {
+  await env.SHOP_DB.put("co_admins", JSON.stringify(list));
+}
+
+async function getAdminRole(chatId, env) {
+  chatId = String(chatId);
+  if (chatId === String(env.ADMIN_ID)) return "owner";
+  const list = await getCoAdmins(env);
+  const found = list.find((a) => String(a.chatId) === chatId);
+  return found ? found.role : null;
+}
+
+// حداقل سطح لازم برای هر دکمه/اکشن پنل — پیش‌فرض ۱ (پایین‌ترین سطح: سفارش‌ها) برای هرچیزی که اینجا لیست نشده
+function callbackRequiredLevel(data) {
+  if (data.startsWith("del:") || data.startsWith("delmenu:") || data === "admins" || data.startsWith("deladmin:")) {
+    return 4; // فقط مالک: حذف محصول، مدیریت همکاران
+  }
+  if (
+    data === "settings" || data.startsWith("setfee:") ||
+    data === "discounts" || data === "newcode" || data.startsWith("disctype:") || data.startsWith("delcode:") ||
+    data === "stats" || data === "favstats" || data === "dobackup"
+  ) {
+    return 3; // سطح کامل
+  }
+  if (
+    data === "newitem" || data === "newitem_cancel" || data === "newitem_confirm" || data === "newitem_like" ||
+    data === "newphoto_done" || data === "addhelp" ||
+    data.startsWith("addimg:") || data.startsWith("edit:") || data.startsWith("editf:") ||
+    data.startsWith("editimgs:") || data.startsWith("editmenu:") ||
+    data.startsWith("setcat:") || data.startsWith("setkarat:") || data.startsWith("setbadge:") || data.startsWith("setfeatured:") ||
+    data.startsWith("delimg:") || data.startsWith("newcat:") || data.startsWith("newkarat:") ||
+    data.startsWith("newbadge:") || data.startsWith("newfeatured:") || data.startsWith("newfee:")
+  ) {
+    return 2; // سطح محصولات
+  }
+  return 1; // سطح سفارش‌ها (و هرچیز عمومی/ناوبری مثل منو، لیست، تیکت‌ها، تایید/رد سفارش)
+}
+
+async function handleAddAdminCommand(text, chatId, env) {
+  const parts = text.trim().split(/\s+/);
+  const targetId = parts[1];
+  const role = parts[2];
+  const validRoles = ["orders", "products", "full"];
+  if (!targetId || !/^\d+$/.test(targetId) || !validRoles.includes(role)) {
+    await sendMessage(
+      chatId,
+      "فرمت درست نیست. اینجوری بفرست:\n/addadmin <chat_id> <role>\n\nrole یکی از این‌ها:\norders (فقط سفارش‌ها و تیکت‌ها)\nproducts (محصولات + سفارش‌ها)\nfull (همه‌چی بجز حذف محصول و مدیریت همکاران)\n\nمثال:\n/addadmin 123456789 products\n\n(همکارت باید اول تو همین ربات /whoami رو بزنه تا chat id خودش رو بگیره و بهت بده)",
+      env
+    );
+    return;
+  }
+  if (targetId === String(env.ADMIN_ID)) {
+    await sendMessage(chatId, "این آیدی خودته، نیازی به اضافه کردن نیست.", env);
+    return;
+  }
+  const list = await getCoAdmins(env);
+  const existing = list.find((a) => String(a.chatId) === targetId);
+  if (existing) {
+    existing.role = role;
+  } else {
+    list.push({ chatId: targetId, role, addedAt: Date.now() });
+  }
+  await saveCoAdmins(list, env);
+  await sendMessage(
+    chatId,
+    "✅ همکار با آیدی " + targetId + " با سطح دسترسی «" + ROLE_LABEL[role] + "» اضافه شد.",
+    env,
+    [[{ text: "👥 لیست همکاران", callback_data: "admins" }]]
+  );
+  try {
+    await sendMessage(
+      targetId,
+      "سلام! دسترسی مدیریت به فروشگاه ریحون گلد گالری برات فعال شد.\nسطح دسترسی: " + ROLE_LABEL[role] + "\n\nبرای شروع /start رو بزن.",
+      env
+    );
+  } catch (err) {
+    // اگه همکار هنوز به ربات پیام نداده باشه، ارسال بهش خطا می‌ده؛ مهم نیست، خودش /start رو می‌زنه
+  }
+}
+
+async function sendAdminList(chatId, messageId, env) {
+  const list = await getCoAdmins(env);
+  const rows = list.map((a) => [{ text: "🗑 " + a.chatId + " — " + (ROLE_LABEL[a.role] || a.role), callback_data: "deladmin:" + a.chatId }]);
+  rows.push([{ text: "« بازگشت", callback_data: "menu" }]);
+  const text = list.length
+    ? "👥 همکاران فعلی:\nبرای حذف روی هرکدوم بزن.\n\nبرای افزودن همکار جدید:\n/addadmin <chat_id> <role>\nrole: orders / products / full"
+    : "هنوز همکاری اضافه نکردی.\n\nبرای افزودن:\n/addadmin <chat_id> <role>\nrole: orders / products / full\n\n(همکارت اول باید تو ربات /whoami رو بزنه تا chat id خودش رو بگیره)";
+  if (messageId) await editMessage(chatId, messageId, text, env, rows);
+  else await sendMessage(chatId, text, env, rows);
+}
+
 // ------------------------------------------------------------
 //  Router
 // ------------------------------------------------------------
@@ -52,7 +166,15 @@ export default {
       return handleMyOrders(request, env);
     }
 
-    // ---- علاقه‌مندی‌ها (کاربر لاگین‌کرده) ----
+    // ---- فاکتور سفارش تاییدشده ----
+    if (url.pathname === "/api/invoice" && request.method === "GET") {
+      return handleInvoiceData(request, env);
+    }
+
+    // ---- کدهای تخفیف ----
+    if (url.pathname === "/api/discount/check" && request.method === "POST") {
+      return handleDiscountCheck(request, env);
+    }
     if (url.pathname === "/api/favorites/toggle" && request.method === "POST") {
       return handleFavoriteToggle(request, env);
     }
@@ -246,7 +368,22 @@ async function handleNewOrder(request, env) {
   const phone = String(body.phone || "").trim();
   const address = String(body.address || "").trim();
   const items = Array.isArray(body.items) ? body.items : [];
-  const total = Number(body.total) || 0;
+  const subtotal = Number(body.subtotal) || Number(body.total) || 0;
+  const discountCodeRaw = String(body.discountCode || "").trim().toUpperCase();
+
+  let total = subtotal;
+  let discountInfo = null;
+
+  if (discountCodeRaw) {
+    const discount = await getDiscount(discountCodeRaw, env);
+    if (discount && discount.active) {
+      const discountAmount = computeDiscountAmount(discount, subtotal);
+      total = Math.max(0, subtotal - discountAmount);
+      discountInfo = { code: discount.code, type: discount.type, value: discount.value, discountAmount };
+      discount.usageCount = (discount.usageCount || 0) + 1;
+      await saveDiscount(discount, env);
+    }
+  }
 
   if (!name || !phone || !address || items.length === 0) {
     return jsonResponse({ ok: false, error: "missing fields" }, 400);
@@ -256,6 +393,7 @@ async function handleNewOrder(request, env) {
   const account = await getUserFromRequest(request, env);
 
   const ticketNumber = await getNextTicket(env);
+  const invoiceToken = crypto.randomUUID().replace(/-/g, "");
 
   const order = {
     ticketNumber: ticketNumber,
@@ -263,9 +401,12 @@ async function handleNewOrder(request, env) {
     phone: phone,
     address: address,
     items: items,
+    subtotal: subtotal,
+    discount: discountInfo,
     total: total,
     status: "pending",
     accountPhone: account ? account.phone : null,
+    invoiceToken: invoiceToken,
     createdAt: Date.now(),
   };
 
@@ -291,16 +432,20 @@ async function handleNewOrder(request, env) {
     return "- " + it.name + " (" + karatText + "، " + it.weight + " گرم) x" + it.qty + " = " + toToman(it.unitPrice * it.qty) + " تومان";
   }).join("\n");
 
+  const discountLine = discountInfo
+    ? "\n\nکد تخفیف: " + discountInfo.code + " (" + toToman(discountInfo.discountAmount) + " تومان)\nجمع قبل از تخفیف: " + toToman(subtotal) + " تومان"
+    : "";
+
   const message =
     "تیکت سفارش جدید #" + ticketNumber + "\n\n" +
     "نام: " + name + "\n" +
     "تماس: " + phone + "\n" +
     "آدرس: " + address + "\n\n" +
-    "اقلام:\n" + itemLines + "\n\n" +
+    "اقلام:\n" + itemLines + discountLine + "\n\n" +
     "جمع کل: " + toToman(total) + " تومان";
 
   try {
-    await sendMessage(env.ADMIN_ID, message, env, [
+    await notifyAdmins(env, 1, message, [
       [{ text: "✅ تایید سفارش", callback_data: "apporder:" + ticketNumber }, { text: "❌ رد سفارش", callback_data: "rejorder:" + ticketNumber }],
     ]);
   } catch (err) {
@@ -381,8 +526,116 @@ async function handleMyOrders(request, env) {
 }
 
 // ============================================================
-//  علاقه‌مندی‌ها (Favorites)
+//  کدهای تخفیف
 // ============================================================
+async function getDiscountCodes(env) {
+  const raw = await env.SHOP_DB.get("discount_codes");
+  return raw ? JSON.parse(raw) : [];
+}
+
+async function saveDiscountCodesIndex(list, env) {
+  await env.SHOP_DB.put("discount_codes", JSON.stringify(list));
+}
+
+async function getDiscount(code, env) {
+  const raw = await env.SHOP_DB.get("discount:" + String(code).toUpperCase());
+  return raw ? JSON.parse(raw) : null;
+}
+
+async function saveDiscount(discount, env) {
+  await env.SHOP_DB.put("discount:" + discount.code, JSON.stringify(discount));
+  const index = await getDiscountCodes(env);
+  if (!index.includes(discount.code)) {
+    index.push(discount.code);
+    await saveDiscountCodesIndex(index, env);
+  }
+}
+
+async function deleteDiscount(code, env) {
+  code = String(code).toUpperCase();
+  await env.SHOP_DB.delete("discount:" + code);
+  const index = await getDiscountCodes(env);
+  await saveDiscountCodesIndex(index.filter((c) => c !== code), env);
+}
+
+function computeDiscountAmount(discount, subtotal) {
+  if (discount.type === "percent") return Math.round((subtotal * discount.value) / 100);
+  return Math.min(discount.value, subtotal);
+}
+
+function discountLabel(discount) {
+  return discount.type === "percent" ? discount.value + "% تخفیف" : toToman(discount.value) + " تومان تخفیف";
+}
+
+async function handleDiscountCheck(request, env) {
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return jsonResponse({ valid: false, error: "بدنه درخواست نامعتبره." }, 400);
+  }
+  const code = String(body.code || "").trim().toUpperCase();
+  const subtotal = Number(body.subtotal) || 0;
+  if (!code) return jsonResponse({ valid: false, error: "کد رو وارد کن." });
+
+  const discount = await getDiscount(code, env);
+  if (!discount || !discount.active) {
+    return jsonResponse({ valid: false, error: "کد تخفیف معتبر نیست." });
+  }
+
+  const discountAmount = computeDiscountAmount(discount, subtotal);
+  return jsonResponse({
+    valid: true,
+    code: discount.code,
+    type: discount.type,
+    value: discount.value,
+    discountAmount,
+    label: discountLabel(discount),
+  });
+}
+
+// ------------------------------------------------------------
+//  ساخت/حذف کد تخفیف از پنل تلگرام (پیش‌نویس موقت شبیه‌سازی محصول)
+// ------------------------------------------------------------
+async function getDiscDraft(chatId, env) {
+  const raw = await env.SHOP_DB.get("discdraft:" + chatId);
+  return raw ? JSON.parse(raw) : {};
+}
+
+async function saveDiscDraft(chatId, patch, env) {
+  const draft = await getDiscDraft(chatId, env);
+  Object.assign(draft, patch);
+  await env.SHOP_DB.put("discdraft:" + chatId, JSON.stringify(draft));
+  return draft;
+}
+
+async function clearDiscDraft(chatId, env) {
+  await env.SHOP_DB.delete("discdraft:" + chatId);
+}
+
+async function buildDiscountListKeyboard(env) {
+  const codes = await getDiscountCodes(env);
+  const rows = [];
+  for (const code of codes) {
+    const d = await getDiscount(code, env);
+    if (!d) continue;
+    const usageNote = d.usageCount ? " (" + d.usageCount + " بار استفاده)" : "";
+    rows.push([{ text: "🗑 " + d.code + " — " + discountLabel(d) + usageNote, callback_data: "delcode:" + d.code }]);
+  }
+  rows.push([{ text: "➕ کد تخفیف جدید", callback_data: "newcode" }]);
+  rows.push([{ text: "« بازگشت", callback_data: "menu" }]);
+  return rows;
+}
+
+async function sendDiscountList(chatId, messageId, env) {
+  const codes = await getDiscountCodes(env);
+  const text = codes.length ? "🏷 کدهای تخفیف\nبرای حذف یه کد، روش بزن." : "🏷 کدهای تخفیف\nهنوز کد تخفیفی نساختی.";
+  const kb = await buildDiscountListKeyboard(env);
+  if (messageId) await editMessage(chatId, messageId, text, env, kb);
+  else await sendMessage(chatId, text, env, kb);
+}
+
+
 async function getUserFavorites(phone, env) {
   const raw = await env.SHOP_DB.get("favorites:" + phone);
   return raw ? JSON.parse(raw) : [];
@@ -490,6 +743,34 @@ async function buildFavStatsText(env) {
   return text;
 }
 
+// ============================================================
+//  فاکتور سفارش
+// ============================================================
+async function handleInvoiceData(request, env) {
+  const url = new URL(request.url);
+  const ticketNumber = url.searchParams.get("ticket");
+  const token = url.searchParams.get("token");
+  if (!ticketNumber) return jsonResponse({ error: "شماره سفارش لازمه." }, 400);
+
+  const raw = await env.SHOP_DB.get("order:" + ticketNumber);
+  if (!raw) return jsonResponse({ error: "سفارش پیدا نشد." }, 404);
+  const order = JSON.parse(raw);
+
+  if (order.status !== "approved") {
+    return jsonResponse({ error: "فاکتور فقط بعد از تایید سفارش صادر می‌شه." }, 403);
+  }
+
+  let authorized = false;
+  if (token && order.invoiceToken && token === order.invoiceToken) authorized = true;
+  if (!authorized) {
+    const user = await getUserFromRequest(request, env);
+    if (user && order.accountPhone && user.phone === order.accountPhone) authorized = true;
+  }
+  if (!authorized) return jsonResponse({ error: "دسترسی نداری." }, 401);
+
+  return jsonResponse({ order });
+}
+
 async function handleOrderDecision(data, chatId, messageId, env) {
   const parts = data.split(":");
   const approve = parts[0] === "apporder";
@@ -511,8 +792,10 @@ async function handleOrderDecision(data, chatId, messageId, env) {
   if (approve) {
     order.status = "approved";
     await env.SHOP_DB.put("order:" + ticketNumber, JSON.stringify(order));
+    const invoiceUrl = SITE_URL + "/invoice.html?ticket=" + ticketNumber + "&token=" + order.invoiceToken;
     await editMessage(chatId, messageId,
-      "✅ سفارش #" + ticketNumber + " تایید شد.\nموجودی انبار همون‌طوری که کم شده بود می‌مونه.", env);
+      "✅ سفارش #" + ticketNumber + " تایید شد.\nموجودی انبار همون‌طوری که کم شده بود می‌مونه.", env,
+      [[{ text: "🧾 مشاهده / دانلود فاکتور", url: invoiceUrl }]]);
   } else {
     order.status = "rejected";
     await env.SHOP_DB.put("order:" + ticketNumber, JSON.stringify(order));
@@ -628,6 +911,22 @@ function answerCallback(callbackQueryId, env, text) {
   return tgApi("answerCallbackQuery", payload, env);
 }
 
+// ارسال پیام به مالک + هر همکاری که سطح دسترسیش کافیه (برای سفارش/تیکت جدید)
+async function notifyAdmins(env, minLevel, text, keyboard) {
+  const recipients = [String(env.ADMIN_ID)];
+  const coAdmins = await getCoAdmins(env);
+  for (const a of coAdmins) {
+    if (roleLevel(a.role) >= minLevel) recipients.push(String(a.chatId));
+  }
+  for (const chatId of recipients) {
+    try {
+      await sendMessage(chatId, text, env, keyboard);
+    } catch (err) {
+      // اگه ارسال به یکی از همکارها خطا بده (مثلاً ربات رو بلاک کرده)، بقیه رو متوقف نکن
+    }
+  }
+}
+
 // ============================================================
 //  Webhook entrypoint
 // ============================================================
@@ -649,12 +948,13 @@ async function handleTelegramWebhook(request, env) {
     return new Response("ok");
   }
 
-  if (chatId !== String(env.ADMIN_ID)) {
+  const role = await getAdminRole(chatId, env);
+  if (!role) {
     return new Response("ok");
   }
 
   try {
-    await handleAdminMessage(msg, chatId, env);
+    await handleAdminMessage(msg, chatId, env, role);
   } catch (err) {
     await sendMessage(chatId, "خطا: " + err.message, env);
   }
@@ -665,7 +965,7 @@ async function handleTelegramWebhook(request, env) {
 // ============================================================
 //  Admin message handling (متن‌های ادمین + state دوطرفه)
 // ============================================================
-async function handleAdminMessage(msg, chatId, env) {
+async function handleAdminMessage(msg, chatId, env, role) {
   const state = await env.SHOP_DB.get("state:" + chatId);
   if (state) {
     const consumed = await handlePendingState(state, msg, chatId, env);
@@ -673,12 +973,16 @@ async function handleAdminMessage(msg, chatId, env) {
   }
 
   if (msg.photo && msg.caption) {
+    if (roleLevel(role) < 2) {
+      await sendMessage(chatId, "⛔️ برای افزودن محصول دسترسی لازم رو نداری.", env);
+      return;
+    }
     await handleNewItem(msg, env);
     return;
   }
 
   if (msg.text === "/start" || msg.text === "/panel") {
-    await sendDashboard(chatId, env);
+    await sendDashboard(chatId, env, role);
     return;
   }
 
@@ -693,6 +997,10 @@ async function handleAdminMessage(msg, chatId, env) {
   }
 
   if (msg.text && msg.text.startsWith("/delete")) {
+    if (role !== "owner") {
+      await sendMessage(chatId, "⛔️ حذف محصول فقط برای مالک فروشگاهه.", env);
+      return;
+    }
     await handleDeleteCommand(msg.text, chatId, env);
     return;
   }
@@ -703,8 +1011,30 @@ async function handleAdminMessage(msg, chatId, env) {
   }
 
   if (msg.text === "/backup") {
+    if (roleLevel(role) < 3) {
+      await sendMessage(chatId, "⛔️ دسترسی لازم برای این کار رو نداری.", env);
+      return;
+    }
     await sendMessage(chatId, "در حال تهیه بک‌آپ...", env);
     await runBackup(env, "دستی");
+    return;
+  }
+
+  if (msg.text && msg.text.startsWith("/addadmin")) {
+    if (role !== "owner") {
+      await sendMessage(chatId, "⛔️ مدیریت همکاران فقط برای مالک فروشگاهه.", env);
+      return;
+    }
+    await handleAddAdminCommand(msg.text, chatId, env);
+    return;
+  }
+
+  if (msg.text === "/admins") {
+    if (role !== "owner") {
+      await sendMessage(chatId, "⛔️ مدیریت همکاران فقط برای مالک فروشگاهه.", env);
+      return;
+    }
+    await sendAdminList(chatId, null, env);
     return;
   }
 
@@ -860,6 +1190,54 @@ async function handlePendingState(state, msg, chatId, env) {
     return true;
   }
 
+  if (state === "disc_code") {
+    const raw = msg.text.trim().toUpperCase().replace(/\s+/g, "");
+    if (!/^[A-Z0-9_-]{3,20}$/.test(raw)) {
+      await sendMessage(chatId, "کد نامعتبره. یه کد کوتاه انگلیسی/عددی بفرست (۳ تا ۲۰ کاراکتر، بدون فاصله؛ مثلاً WELCOME10):", env, [[{ text: "انصراف", callback_data: "menu" }]]);
+      return true;
+    }
+    const existing = await getDiscount(raw, env);
+    if (existing) {
+      await sendMessage(chatId, "این کد قبلاً ساخته شده. یه کد دیگه بفرست:", env, [[{ text: "انصراف", callback_data: "menu" }]]);
+      return true;
+    }
+    await saveDiscDraft(chatId, { code: raw }, env);
+    await env.SHOP_DB.put("state:" + chatId, "disc_type_wait");
+    await sendMessage(chatId, "نوع تخفیف کد «" + raw + "» چیه؟", env, [
+      [{ text: "درصدی (%)", callback_data: "disctype:percent" }, { text: "مبلغ ثابت (تومان)", callback_data: "disctype:fixed" }],
+      [{ text: "انصراف", callback_data: "menu" }],
+    ]);
+    return true;
+  }
+
+  if (state === "disc_type_wait") {
+    await sendMessage(chatId, "لطفاً از دکمه‌های بالا یکی رو انتخاب کن.", env);
+    return true;
+  }
+
+  if (state === "disc_value") {
+    const draft = await getDiscDraft(chatId, env);
+    const val = parseFloat(msg.text);
+    const invalid = isNaN(val) || val <= 0 || (draft.type === "percent" && val > 100);
+    if (invalid) {
+      await sendMessage(
+        chatId,
+        draft.type === "percent" ? "عدد نامعتبره. درصد رو بین ۱ تا ۱۰۰ بفرست:" : "عدد نامعتبره. مبلغ رو به تومان بفرست (مثلاً 50000):",
+        env,
+        [[{ text: "انصراف", callback_data: "menu" }]]
+      );
+      return true;
+    }
+    const discount = { code: draft.code, type: draft.type, value: val, active: true, usageCount: 0, createdAt: Date.now() };
+    await saveDiscount(discount, env);
+    await clearDiscDraft(chatId, env);
+    await env.SHOP_DB.delete("state:" + chatId);
+    await sendMessage(chatId, "کد تخفیف «" + draft.code + "» با " + discountLabel(discount) + " ساخته شد ✅", env, [
+      [{ text: "🏷 لیست کدها", callback_data: "discounts" }, { text: "🏠 منو", callback_data: "menu" }],
+    ]);
+    return true;
+  }
+
   return false;
 }
 
@@ -1008,12 +1386,19 @@ async function handleCallbackQuery(cq, env) {
   const messageId = cq.message.message_id;
   const data = cq.data || "";
 
-  if (chatId !== String(env.ADMIN_ID)) {
+  const role = await getAdminRole(chatId, env);
+  if (!role) {
     await answerCallback(cq.id, env);
     return;
   }
 
   await answerCallback(cq.id, env);
+
+  const required = callbackRequiredLevel(data);
+  if (roleLevel(role) < required) {
+    await editMessage(chatId, messageId, "⛔️ دسترسی لازم برای این کار رو نداری.", env, [[{ text: "🏠 منو", callback_data: "menu" }]]);
+    return;
+  }
 
   if (data.startsWith("apporder:") || data.startsWith("rejorder:")) {
     await handleOrderDecision(data, chatId, messageId, env);
@@ -1028,7 +1413,20 @@ async function handleCallbackQuery(cq, env) {
   }
 
   if (data === "menu") {
-    await editMessage(chatId, messageId, DASHBOARD_TEXT, env, dashboardKeyboard());
+    await editMessage(chatId, messageId, DASHBOARD_TEXT, env, dashboardKeyboard(role));
+    return;
+  }
+
+  if (data === "admins") {
+    await sendAdminList(chatId, messageId, env);
+    return;
+  }
+
+  if (data.startsWith("deladmin:")) {
+    const targetId = data.slice("deladmin:".length);
+    const list = await getCoAdmins(env);
+    await saveCoAdmins(list.filter((a) => String(a.chatId) !== targetId), env);
+    await sendAdminList(chatId, messageId, env);
     return;
   }
 
@@ -1292,6 +1690,38 @@ async function handleCallbackQuery(cq, env) {
     return;
   }
 
+  if (data === "discounts") {
+    await sendDiscountList(chatId, messageId, env);
+    return;
+  }
+
+  if (data === "newcode") {
+    await env.SHOP_DB.put("state:" + chatId, "disc_code");
+    await editMessage(chatId, messageId, "کد تخفیف رو بفرست (فقط حروف/عدد انگلیسی، بدون فاصله؛ مثلاً WELCOME10):", env, [[{ text: "انصراف", callback_data: "menu" }]]);
+    return;
+  }
+
+  if (data.startsWith("disctype:")) {
+    const type = data.split(":")[1];
+    await saveDiscDraft(chatId, { type }, env);
+    await env.SHOP_DB.put("state:" + chatId, "disc_value");
+    await editMessage(
+      chatId,
+      messageId,
+      type === "percent" ? "چند درصد تخفیف؟ (عدد بین ۱ تا ۱۰۰):" : "چقدر تومان تخفیف؟ (عدد، مثلاً 50000):",
+      env,
+      [[{ text: "انصراف", callback_data: "menu" }]]
+    );
+    return;
+  }
+
+  if (data.startsWith("delcode:")) {
+    const code = data.slice("delcode:".length);
+    await deleteDiscount(code, env);
+    await sendDiscountList(chatId, messageId, env);
+    return;
+  }
+
   if (data === "settings") {
     const settings = await getSettings(env);
     const text =
@@ -1346,18 +1776,48 @@ async function handleCallbackQuery(cq, env) {
 // ============================================================
 const DASHBOARD_TEXT = "پنل مدیریت گالری طلا 🏆\nیکی از گزینه‌ها رو انتخاب کن:";
 
-function dashboardKeyboard() {
-  return [
-    [{ text: "📋 لیست محصولات", callback_data: "list:0" }, { text: "✏️ ویرایش محصول", callback_data: "editmenu:0" }],
-    [{ text: "🗑 حذف محصول", callback_data: "delmenu:0" }, { text: "📊 آمار فروشگاه", callback_data: "stats" }],
-    [{ text: "⚙️ تنظیمات اجرت", callback_data: "settings" }, { text: "🎫 تیکت‌های باز", callback_data: "tickets:0" }],
-    [{ text: "➕ افزودن محصول جدید", callback_data: "newitem" }, { text: "💾 بک‌آپ فوری", callback_data: "dobackup" }],
-    [{ text: "📖 روش سریع (عکس+کپشن)", callback_data: "addhelp" }],
-  ];
+function dashboardKeyboard(role) {
+  const level = roleLevel(role);
+  const rows = [];
+
+  if (level >= 2) {
+    rows.push([{ text: "📋 لیست محصولات", callback_data: "list:0" }, { text: "✏️ ویرایش محصول", callback_data: "editmenu:0" }]);
+  } else {
+    rows.push([{ text: "📋 لیست محصولات", callback_data: "list:0" }]);
+  }
+
+  const row2 = [];
+  if (role === "owner") row2.push({ text: "🗑 حذف محصول", callback_data: "delmenu:0" });
+  if (level >= 3) row2.push({ text: "📊 آمار فروشگاه", callback_data: "stats" });
+  if (row2.length) rows.push(row2);
+
+  const row3 = [];
+  if (level >= 3) row3.push({ text: "⚙️ تنظیمات اجرت", callback_data: "settings" });
+  row3.push({ text: "🎫 تیکت‌های باز", callback_data: "tickets:0" });
+  rows.push(row3);
+
+  if (level >= 3) {
+    rows.push([{ text: "🏷 کدهای تخفیف", callback_data: "discounts" }]);
+  }
+
+  const row5 = [];
+  if (level >= 2) row5.push({ text: "➕ افزودن محصول جدید", callback_data: "newitem" });
+  if (level >= 3) row5.push({ text: "💾 بک‌آپ فوری", callback_data: "dobackup" });
+  if (row5.length) rows.push(row5);
+
+  if (level >= 2) {
+    rows.push([{ text: "📖 روش سریع (عکس+کپشن)", callback_data: "addhelp" }]);
+  }
+
+  if (role === "owner") {
+    rows.push([{ text: "👥 مدیریت همکاران", callback_data: "admins" }]);
+  }
+
+  return rows;
 }
 
-function sendDashboard(chatId, env) {
-  return sendMessage(chatId, DASHBOARD_TEXT, env, dashboardKeyboard());
+function sendDashboard(chatId, env, role) {
+  return sendMessage(chatId, DASHBOARD_TEXT, env, dashboardKeyboard(role));
 }
 
 const HELP_TEXT =
@@ -1759,7 +2219,7 @@ async function closeTicket(id, env) {
 async function notifyAdminNewTicketMessage(ticket, env) {
   const lastMsg = ticket.messages[ticket.messages.length - 1];
   const text = "🎫 تیکت #" + ticket.id + " از " + (ticket.name || "کاربر سایت") + "\n\n" + lastMsg.text;
-  await sendMessage(env.ADMIN_ID, text, env, [[{ text: "پاسخ", callback_data: "reply:" + ticket.id }, { text: "بستن تیکت", callback_data: "closetick:" + ticket.id }]]);
+  await notifyAdmins(env, 1, text, [[{ text: "پاسخ", callback_data: "reply:" + ticket.id }, { text: "بستن تیکت", callback_data: "closetick:" + ticket.id }]]);
 }
 
 async function handleCreateTicket(request, env) {
