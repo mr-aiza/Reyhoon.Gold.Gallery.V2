@@ -5,23 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>پنل مدیریت | ریحون گلد گالری</title>
 
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/[email protected]/font/bootstrap-icons.min.css" />
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/[email protected]/styles/overlayscrollbars.min.css" />
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/[email protected]/dist/css/adminlte.min.css" />
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link href="https://cdn.jsdelivr.net/gh/rastikerdar/[email protected]/dist/font-face.css" rel="stylesheet" type="text/css" />
-
-<!-- قالب اختصاصی پنل مدیریت (فایل جدا، جدا از استایل سایت اصلی) -->
+<!-- قالب اختصاصی پنل مدیریت — کاملاً مستقل، بدون وابستگی به CDN خارجی
+     (چون jsDelivr/فونت‌های گوگل در خیلی جاها فیلتر/ناپایدارن و کل ظاهر رو خراب می‌کردن) -->
 <link rel="stylesheet" href="assets/admin-theme.css" />
 </head>
-<body class="layout-fixed sidebar-expand-lg bg-body-tertiary">
+<body>
 <div class="app-wrapper">
 
   <!-- ==================== ناوبری بالا ==================== -->
   <nav class="app-header navbar navbar-expand bg-white shadow-sm">
     <div class="container-fluid">
       <ul class="navbar-nav">
-        <li class="nav-item"><a class="nav-link" data-lte-toggle="sidebar" href="#" role="button"><i class="bi bi-list"></i></a></li>
+        <li class="nav-item"><a class="nav-link" href="#" role="button" onclick="toggleSidebar();return false;"><i class="bi bi-list"></i></a></li>
       </ul>
       <ul class="navbar-nav ms-auto align-items-center">
         <li class="nav-item me-2 small text-muted d-none d-md-block" id="clockBox"></li>
@@ -38,7 +33,8 @@
   </nav>
 
   <!-- ==================== سایدبار ==================== -->
-  <aside class="app-sidebar shadow" data-bs-theme="dark">
+  <div class="sidebar-backdrop" onclick="toggleSidebar(false)"></div>
+  <aside class="app-sidebar shadow">
     <div class="sidebar-brand">
       <a href="#" class="brand-link">
         <i class="bi bi-gem text-gold fs-4 ms-2"></i>
@@ -47,7 +43,7 @@
     </div>
     <div class="sidebar-wrapper">
       <nav class="mt-2">
-        <ul class="nav sidebar-menu flex-column" data-lte-toggle="treeview" role="menu" data-accordion="false">
+        <ul class="nav sidebar-menu flex-column" role="menu">
           <li class="nav-item"><a href="#" class="nav-link nav-view active" data-view="dashboard"><i class="nav-icon bi bi-speedometer2"></i><p>داشبورد</p></a></li>
           <li class="nav-item"><a href="#" class="nav-link nav-view" data-view="products"><i class="nav-icon bi bi-gem"></i><p>محصولات</p></a></li>
           <li class="nav-item"><a href="#" class="nav-link nav-view" data-view="orders"><i class="nav-icon bi bi-receipt"></i><p>سفارش‌ها</p></a></li>
@@ -460,13 +456,45 @@
 
 <div class="toast-wrap" id="toastWrap"></div>
 
-<script src="https://cdn.jsdelivr.net/npm/@popperjs/[email protected]/dist/umd/popper.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/[email protected]/dist/js/bootstrap.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/[email protected]/browser/overlayscrollbars.browser.es6.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/[email protected]/dist/js/adminlte.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/[email protected]/dist/chart.umd.min.js"></script>
-
 <script>
+/* ============================================================
+   جایگزین سبک bootstrap.Modal — چون دیگه به Bootstrap JS از CDN
+   وابسته نیستیم. همون API (.show()/.hide()) رو پیاده‌سازی می‌کنه
+   تا بقیه‌ی کد پایین (openProductModal و ...) دست‌نخورده بمونه.
+   ============================================================ */
+const bootstrap = {
+  Modal: function(el){
+    this.el = el;
+    this.show = function(){
+      el.classList.add("show");
+      document.body.style.overflow = "hidden";
+    };
+    this.hide = function(){
+      el.classList.remove("show");
+      document.body.style.overflow = "";
+    };
+  }
+};
+// کلیک روی بک‌دراپ یا دکمه‌های data-bs-dismiss مودال رو می‌بندند
+document.addEventListener("click", function(e){
+  const dismiss = e.target.closest("[data-bs-dismiss='modal']");
+  if(dismiss){
+    const modalEl = dismiss.closest(".modal");
+    if(modalEl){ modalEl.classList.remove("show"); document.body.style.overflow = ""; }
+    return;
+  }
+  if(e.target.classList && e.target.classList.contains("modal")){
+    e.target.classList.remove("show");
+    document.body.style.overflow = "";
+  }
+});
+
+/* ---------------- سایدبار موبایل ---------------- */
+function toggleSidebar(force){
+  const open = typeof force === "boolean" ? force : !document.body.classList.contains("sidebar-open");
+  document.body.classList.toggle("sidebar-open", open);
+}
+
 /* ============================================================
    تنظیمات پایه — این آدرس را با آدرس Worker اختصاصی پنل مدیریت
    (reyhoon-admin-worker.js) جایگزین کنید
@@ -514,6 +542,7 @@ function toggleTheme(){
   const next = current === "dark" ? "light" : "dark";
   try{ localStorage.setItem(THEME_KEY, next); }catch(e){}
   applyTheme(next);
+  if(lastChartValues.length) drawSalesChart(lastChartLabels, lastChartValues);
 }
 (function initTheme(){
   let saved = "light";
@@ -558,6 +587,7 @@ document.querySelectorAll(".nav-view").forEach(function(a){
     document.querySelectorAll(".view").forEach(v=>v.classList.remove("active"));
     document.getElementById("view-"+view).classList.add("active");
     loadView(view);
+    toggleSidebar(false);
   });
 });
 
@@ -630,17 +660,79 @@ async function loadDashboard(){
       "<td>"+fmtDate(o.createdAt)+"</td></tr>"
     ).join("") || "<tr><td colspan='5' class='text-center text-muted py-3'>سفارشی ثبت نشده</td></tr>";
 
-    const ctx = document.getElementById("salesChart");
-    const labels = data.salesByDay.map(d=>d.label);
-    const values = data.salesByDay.map(d=>d.total);
-    if(salesChartInstance) salesChartInstance.destroy();
-    salesChartInstance = new Chart(ctx, {
-      type: "line",
-      data: { labels, datasets: [{ label:"فروش (تومان)", data: values, borderColor:"#c9a24b", backgroundColor:"rgba(201,162,75,.15)", tension:.35, fill:true }] },
-      options: { plugins:{legend:{display:false}}, scales:{ y:{ beginAtZero:true } } }
-    });
+    lastChartLabels = data.salesByDay.map(d=>d.label);
+    lastChartValues = data.salesByDay.map(d=>d.total);
+    drawSalesChart(lastChartLabels, lastChartValues);
   }catch(e){ toast(e.message, "danger"); }
 }
+
+/* ---------------- نمودار فروش سبک، بدون وابستگی به Chart.js ---------------- */
+let lastChartLabels = [], lastChartValues = [];
+function drawSalesChart(labels, values){
+  const canvas = document.getElementById("salesChart");
+  const dpr = window.devicePixelRatio || 1;
+  const cssW = canvas.parentElement.clientWidth;
+  const cssH = 200;
+  canvas.style.width = cssW + "px";
+  canvas.style.height = cssH + "px";
+  canvas.width = cssW * dpr;
+  canvas.height = cssH * dpr;
+  const ctx = canvas.getContext("2d");
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+  ctx.clearRect(0, 0, cssW, cssH);
+
+  const pad = { top: 16, right: 12, bottom: 26, left: 12 };
+  const w = cssW - pad.left - pad.right;
+  const h = cssH - pad.top - pad.bottom;
+  const max = Math.max(1, ...values);
+  const isDark = document.documentElement.getAttribute("data-rg-theme") === "dark";
+  const n = values.length;
+  const stepX = n > 1 ? w / (n - 1) : 0;
+  const pts = values.map((v, i) => ({ x: pad.left + i * stepX, y: pad.top + h - (v / max) * h }));
+
+  // خط پایه
+  ctx.strokeStyle = isDark ? "#332c1c" : "#ece5d5";
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(pad.left, pad.top + h); ctx.lineTo(pad.left + w, pad.top + h); ctx.stroke();
+
+  if(n > 1){
+    // ناحیه‌ی زیر نمودار
+    ctx.beginPath();
+    ctx.moveTo(pts[0].x, pad.top + h);
+    pts.forEach(p => ctx.lineTo(p.x, p.y));
+    ctx.lineTo(pts[n-1].x, pad.top + h);
+    ctx.closePath();
+    ctx.fillStyle = "rgba(201,162,75,.15)";
+    ctx.fill();
+
+    // خط نمودار
+    ctx.beginPath();
+    pts.forEach((p, i) => i === 0 ? ctx.moveTo(p.x, p.y) : ctx.lineTo(p.x, p.y));
+    ctx.strokeStyle = "#c9a24b";
+    ctx.lineWidth = 2.5;
+    ctx.lineJoin = "round";
+    ctx.stroke();
+  }
+
+  // نقطه‌ها
+  ctx.fillStyle = "#c9a24b";
+  pts.forEach(p => { ctx.beginPath(); ctx.arc(p.x, p.y, 3.5, 0, Math.PI*2); ctx.fill(); });
+
+  // لیبل روزها
+  ctx.fillStyle = isDark ? "#a89c7c" : "#8a8270";
+  ctx.font = "11px Tahoma, sans-serif";
+  ctx.textAlign = "center";
+  pts.forEach((p, i) => ctx.fillText(labels[i], p.x, cssH - 6));
+}
+let resizeTimer;
+window.addEventListener("resize", function(){
+  clearTimeout(resizeTimer);
+  resizeTimer = setTimeout(function(){
+    if(document.getElementById("view-dashboard").classList.contains("active") && lastChartValues.length){
+      drawSalesChart(lastChartLabels, lastChartValues);
+    }
+  }, 150);
+});
 function orderStatusLabel(s){
   return { pending:"در انتظار", in_progress:"در حال انجام", completed:"تکمیل‌شده", rejected:"رد‌شده" }[s] || s;
 }
