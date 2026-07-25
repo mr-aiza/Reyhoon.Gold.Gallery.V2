@@ -7,7 +7,6 @@ const CORS_HEADERS = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
   "Access-Control-Allow-Headers": "Content-Type, Authorization",
-  "Access-Control-Max-Age": "86400",
 };
 
 const PAGE_SIZE = 5;
@@ -51,6 +50,14 @@ export default {
     // ---- پیگیری سفارش‌های کاربر لاگین‌کرده ----
     if (url.pathname === "/api/orders/mine" && request.method === "GET") {
       return handleMyOrders(request, env);
+    }
+
+    // ---- علاقه‌مندی‌ها (کاربر لاگین‌کرده) ----
+    if (url.pathname === "/api/favorites/toggle" && request.method === "POST") {
+      return handleFavoriteToggle(request, env);
+    }
+    if (url.pathname === "/api/favorites/mine" && request.method === "GET") {
+      return handleMyFavorites(request, env);
     }
 
     if (url.pathname === "/telegram-webhook" && request.method === "POST") {
@@ -371,6 +378,116 @@ async function handleMyOrders(request, env) {
   orders.sort((a, b) => b.createdAt - a.createdAt);
 
   return jsonResponse({ orders });
+}
+
+// ============================================================
+//  علاقه‌مندی‌ها (Favorites)
+// ============================================================
+async function getUserFavorites(phone, env) {
+  const raw = await env.SHOP_DB.get("favorites:" + phone);
+  return raw ? JSON.parse(raw) : [];
+}
+
+async function saveUserFavorites(phone, list, env) {
+  await env.SHOP_DB.put("favorites:" + phone, JSON.stringify(list));
+}
+
+async function getFavCounts(env) {
+  const raw = await env.SHOP_DB.get("fav_counts");
+  return raw ? JSON.parse(raw) : {};
+}
+
+async function saveFavCounts(counts, env) {
+  await env.SHOP_DB.put("fav_counts", JSON.stringify(counts));
+}
+
+async function getFavUsers(env) {
+  const raw = await env.SHOP_DB.get("fav_users");
+  return raw ? JSON.parse(raw) : [];
+}
+
+async function saveFavUsers(list, env) {
+  await env.SHOP_DB.put("fav_users", JSON.stringify(list));
+}
+
+async function handleFavoriteToggle(request, env) {
+  const user = await getUserFromRequest(request, env);
+  if (!user) return jsonResponse({ error: "برای علاقه‌مندی باید وارد حساب بشی." }, 401);
+
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return jsonResponse({ error: "بدنه درخواست نامعتبره." }, 400);
+  }
+  const itemId = String(body.itemId || "").trim();
+  if (!itemId) return jsonResponse({ error: "itemId الزامیه." }, 400);
+
+  const list = await getUserFavorites(user.phone, env);
+  const idx = list.indexOf(itemId);
+  const counts = await getFavCounts(env);
+  let favorited;
+
+  if (idx >= 0) {
+    list.splice(idx, 1);
+    counts[itemId] = Math.max(0, (counts[itemId] || 0) - 1);
+    favorited = false;
+  } else {
+    list.push(itemId);
+    counts[itemId] = (counts[itemId] || 0) + 1;
+    favorited = true;
+  }
+
+  await saveUserFavorites(user.phone, list, env);
+  await saveFavCounts(counts, env);
+
+  const favUsers = await getFavUsers(env);
+  const alreadyTracked = favUsers.includes(user.phone);
+  if (list.length > 0 && !alreadyTracked) {
+    favUsers.push(user.phone);
+    await saveFavUsers(favUsers, env);
+  } else if (list.length === 0 && alreadyTracked) {
+    await saveFavUsers(favUsers.filter((p) => p !== user.phone), env);
+  }
+
+  return jsonResponse({ favorited, favorites: list });
+}
+
+async function handleMyFavorites(request, env) {
+  const user = await getUserFromRequest(request, env);
+  if (!user) return jsonResponse({ error: "برای دیدن علاقه‌مندی‌هات باید وارد حساب بشی." }, 401);
+
+  const list = await getUserFavorites(user.phone, env);
+  const items = await getItems(env);
+  const favItems = items.filter((it) => list.includes(String(it.id)));
+
+  return jsonResponse({ itemIds: list, items: favItems });
+}
+
+async function buildFavStatsText(env) {
+  const counts = await getFavCounts(env);
+  const favUsers = await getFavUsers(env);
+  const items = await getItems(env);
+  const byId = {};
+  items.forEach((it) => { byId[String(it.id)] = it; });
+
+  const entries = Object.entries(counts).filter(([, c]) => c > 0);
+  entries.sort((a, b) => b[1] - a[1]);
+
+  let text = "❤️ پرطرفدارترین‌ها\n\n";
+  text += "تعداد کاربرانی که علاقه‌مندی دارن: " + favUsers.length + "\n\n";
+  if (entries.length === 0) {
+    text += "هنوز کسی چیزی رو لایک نکرده.";
+    return text;
+  }
+  text += "پرطرفدارترین محصولات:\n";
+  entries.slice(0, 15).forEach(([id, count], i) => {
+    const it = byId[id];
+    const name = it ? it.name : "(محصول حذف‌شده #" + id + ")";
+    text += (i + 1) + ". " + name + " — " + count + " ❤️\n";
+  });
+
+  return text;
 }
 
 async function handleOrderDecision(data, chatId, messageId, env) {
@@ -1163,7 +1280,15 @@ async function handleCallbackQuery(cq, env) {
   }
 
   if (data === "stats") {
-    await editMessage(chatId, messageId, await buildStatsText(env), env, [[{ text: "« بازگشت", callback_data: "menu" }]]);
+    await editMessage(chatId, messageId, await buildStatsText(env), env, [
+      [{ text: "❤️ پرطرفدارترین‌ها", callback_data: "favstats" }],
+      [{ text: "« بازگشت", callback_data: "menu" }],
+    ]);
+    return;
+  }
+
+  if (data === "favstats") {
+    await editMessage(chatId, messageId, await buildFavStatsText(env), env, [[{ text: "« بازگشت", callback_data: "stats" }]]);
     return;
   }
 

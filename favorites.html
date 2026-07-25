@@ -3,47 +3,34 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>همه محصولات | ریحون گلد گالری</title>
-<meta name="description" content="کاتالوگ کامل طلا و جواهرات ریحون گلد گالری — فیلتر بر اساس دسته و عیار، با قیمت لحظه‌ای.">
+<title>علاقه‌مندی‌های من | ریحون گلد گالری</title>
+<meta name="description" content="محصولات ذخیره‌شده در لیست علاقه‌مندی‌های شما در ریحون گلد گالری.">
 <link rel="preconnect" href="https://cdnjs.cloudflare.com">
 <link href="https://cdnjs.cloudflare.com/ajax/libs/vazirmatn/33.0.3/Vazirmatn-font-face.css" rel="stylesheet">
 <link rel="stylesheet" href="assets/styles.css">
+<style>
+  .fav-empty, .fav-loggedout{ text-align:center; padding:60px 20px; color:var(--text-dim); grid-column:1/-1; }
+  .fav-loggedout a{ color:var(--gold); }
+</style>
 </head>
 <body>
 
-<!-- ===== Site Header (رندر می‌شه توسط assets/app.js) ===== -->
 <div id="siteHeaderRoot"></div>
 
-<div class="breadcrumb"><a href="index.html">صفحه اصلی</a> / همه محصولات</div>
+<div class="breadcrumb"><a href="index.html">صفحه اصلی</a> / علاقه‌مندی‌های من</div>
 
 <section class="page-hero">
   <div class="container">
-    <h1>کاتالوگ کامل محصولات</h1>
-    <p>طلای ۱۸ عیار و ۲۴ عیار — قیمت‌ها بر اساس نرخ لحظه‌ای طلا محاسبه می‌شن. <span class="live-dot" id="liveDot"></span><span id="liveLabel">در حال دریافت قیمت...</span></p>
+    <h1>علاقه‌مندی‌های من</h1>
+    <p>محصولاتی که با علامت قلب ذخیره کردی، اینجا جمع می‌شن.</p>
   </div>
 </section>
 
-<!-- ===== Shop (کاتالوگ کامل) ===== -->
-<section class="shop" id="shop">
+<section class="shop" id="favSection">
   <div class="container">
-    <div class="shop-head">
-      <div class="filters" id="karatFilters">
-        <button class="filter-btn active" data-karat="همه">همه عیارها</button>
-        <button class="filter-btn" data-karat="18">۱۸ عیار</button>
-        <button class="filter-btn" data-karat="24">۲۴ عیار</button>
-      </div>
-      <div class="filters" id="filters">
-        <button class="filter-btn active" data-cat="همه">همه اقلام</button>
-        <button class="filter-btn" data-cat="گردنبند">گردنبند</button>
-        <button class="filter-btn" data-cat="دستبند">دستبند</button>
-        <button class="filter-btn" data-cat="انگشتر">انگشتر</button>
-        <button class="filter-btn" data-cat="گوشواره">گوشواره</button>
-        <button class="filter-btn" data-cat="شمش">شمش</button>
-      </div>
-      <div class="filters" id="modelFilters" style="display:none;"></div>
+    <div class="product-grid" id="favGrid">
+      <div class="fav-empty">در حال بارگذاری...</div>
     </div>
-
-    <div class="product-grid" id="productGrid"></div>
   </div>
 </section>
 
@@ -159,8 +146,89 @@
   </div>
 </div>
 
+
 <script>window.PAGE_MODE = "full";</script>
 <script src="assets/auth.js"></script>
 <script src="assets/app.js"></script>
+<script>
+(function(){
+  const grid = document.getElementById("favGrid");
+  const shop = window.ReyhoonShop;
+
+  function cardHTML(p){
+    const hasStockInfo = typeof p.stock === "number";
+    const outOfStock = hasStockInfo && p.stock <= 0;
+    return `
+      <div class="product-card" data-id="${p.id}">
+        <div class="product-art" data-open="${p.id}" style="cursor:zoom-in;">
+          <button class="fav-btn active" data-fav="${p.id}" aria-label="حذف از علاقه‌مندی‌ها" onclick="event.stopPropagation();">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.6l-1-1a5.5 5.5 0 0 0-7.8 7.8l1 1L12 21l7.8-7.6 1-1a5.5 5.5 0 0 0 0-7.8Z"/></svg>
+          </button>
+          ${shop.productVisual(p)}
+        </div>
+        <div class="product-info">
+          <div class="product-name">${p.name}${p.model ? ` <span class="dot">· ${p.model}</span>` : ""}</div>
+          <div class="product-meta">
+            <span class="star">★</span>
+            <span class="num">${p.rating}</span>
+            <span class="dot">· ${p.weight} گرم</span>
+          </div>
+          <div class="product-price num">${shop.priceText(shop.productPrice(p))} تومان</div>
+          <button class="add-btn" data-add="${p.id}" ${outOfStock ? "disabled" : ""}>${outOfStock ? "ناموجود" : "افزودن به سبد"}</button>
+        </div>
+      </div>`;
+  }
+
+  let favItems = [];
+
+  function render(){
+    if(favItems.length === 0){
+      grid.innerHTML = `<div class="fav-empty">هنوز چیزی به علاقه‌مندی‌هات اضافه نکردی. از <a href="shop.html">کاتالوگ محصولات</a> با زدن آیکون قلب، محصول مورد علاقه‌ت رو ذخیره کن.</div>`;
+      return;
+    }
+    grid.innerHTML = favItems.map(cardHTML).join("");
+
+    grid.querySelectorAll("[data-open]").forEach(art => {
+      art.addEventListener("click", () => shop.openLightbox(parseInt(art.getAttribute("data-open"))));
+    });
+    grid.querySelectorAll("[data-add]:not([disabled])").forEach(btn => {
+      btn.addEventListener("click", () => {
+        const id = parseInt(btn.getAttribute("data-add"));
+        if(shop.addToCart(id)){
+          btn.textContent = "افزوده شد ✓";
+          setTimeout(() => { btn.textContent = "افزودن به سبد"; }, 1200);
+        }
+      });
+    });
+    grid.querySelectorAll("[data-fav]").forEach(btn => {
+      btn.addEventListener("click", async () => {
+        const id = parseInt(btn.getAttribute("data-fav"));
+        await shop.toggleFavorite(id);
+        if(!shop.isFavorite(id)){
+          favItems = favItems.filter(p => p.id !== id);
+          render();
+        }
+      });
+    });
+  }
+
+  async function init(){
+    if(!(window.ReyhoonAuth && window.ReyhoonAuth.isLoggedIn())){
+      grid.innerHTML = `<div class="fav-loggedout">برای دیدن علاقه‌مندی‌هات اول باید <a href="account.html">وارد حساب</a> بشی.</div>`;
+      return;
+    }
+    try{
+      const data = await window.ReyhoonAuth.apiFetch("/api/favorites/mine", { method: "GET" });
+      favItems = data.items || [];
+      render();
+      shop.onPriceReady(render);
+    } catch(err){
+      grid.innerHTML = `<div class="fav-empty">مشکلی پیش اومد: ${err.message}</div>`;
+    }
+  }
+
+  init();
+})();
+</script>
 </body>
 </html>
