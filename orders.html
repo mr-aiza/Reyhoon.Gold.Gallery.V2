@@ -17,6 +17,8 @@
   .order-status{ font-size:12px; font-weight:600; padding:4px 10px; border-radius:999px; }
   .order-status.pending{ background:rgba(201,162,39,0.15); color:var(--gold); }
   .order-status.approved{ background:rgba(122,148,113,0.18); color:var(--green-light); }
+  .order-status.in_progress{ background:rgba(201,162,39,0.18); color:var(--gold); }
+  .order-status.completed{ background:rgba(122,148,113,0.18); color:var(--green-light); }
   .order-status.rejected{ background:rgba(176,107,86,0.18); color:var(--red-light); }
   .order-items{ font-size:13px; color:var(--text-dim); line-height:2; margin:10px 0; }
   .order-total{ display:flex; justify-content:space-between; font-size:14px; font-weight:600; border-top:1px solid var(--border); padding-top:10px; }
@@ -47,7 +49,7 @@
 <script>
 (function(){
   const wrap = document.getElementById("ordersWrap");
-  const STATUS_LABEL = { pending: "در انتظار بررسی", approved: "تایید شده", rejected: "رد شده" };
+  const STATUS_LABEL = { pending: "در انتظار بررسی", approved: "تایید شده", in_progress: "در حال انجام", completed: "تکمیل شده", rejected: "رد شده" };
 
   function toToman(n){ return Math.round(n).toLocaleString("fa-IR"); }
   function formatDate(ts){
@@ -62,7 +64,7 @@
     }
     wrap.innerHTML = orders.map(o => {
       const itemsHtml = o.items.map(it => `${it.name} (${it.karat} عیار، ${it.weight} گرم) × ${it.qty}`).join("<br>");
-      const invoiceHtml = o.status === "approved"
+      const invoiceHtml = (o.status === "approved" || o.status === "in_progress" || o.status === "completed")
         ? `<a class="link-ghost" href="invoice.html?ticket=${o.ticketNumber}" target="_blank" style="display:block;text-align:center;margin-top:10px;">🧾 دانلود فاکتور</a>`
         : "";
       return `

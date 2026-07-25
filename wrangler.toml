@@ -6,6 +6,12 @@ compatibility_date = "2024-01-01"
 binding = "SHOP_DB"
 id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
 
-# این دو تا رو از داشبورد Cloudflare → Settings → Variables and Secrets ست کن:
+[vars]
+# آدرس واقعی سایت (همونی که مشتری‌ها ازش استفاده می‌کنن) — بدون اسلش آخر.
+# این همون آدرسیه که لینک فاکتور تو ربات باهاش ساخته می‌شه. اگه این با آدرس واقعی یکی نباشه،
+# لینک فاکتور تو ربات ۴۰۴ می‌ده ولی چون مشتری از مسیر نسبی داخل خود سایت میره، مشکلی نمی‌بینه.
+SITE_URL = "https://REPLACE_WITH_YOUR_REAL_DOMAIN"
+
+# این سه تا رو از داشبورد Cloudflare → Settings → Variables and Secrets ست کن (یا همینجا اضافه کن):
 #   BOT_TOKEN
 #   ADMIN_ID

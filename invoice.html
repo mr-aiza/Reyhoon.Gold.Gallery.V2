@@ -71,11 +71,15 @@
   const GALLERY_API_URL = "https://reyhoongoldgallery.tempmail41245.workers.dev";
   const root = document.getElementById("root");
   const toolbar = document.getElementById("toolbar");
-  const STATUS_LABEL = { pending: "در انتظار بررسی", approved: "تایید شده", rejected: "رد شده" };
+  const STATUS_LABEL = { pending: "در انتظار بررسی", approved: "تایید شده", in_progress: "در حال انجام", completed: "تکمیل شده", rejected: "رد شده" };
 
   function toToman(n){ return Math.round(n).toLocaleString("fa-IR"); }
   function formatDate(ts){
     try { return new Date(ts).toLocaleDateString("fa-IR", { year:"numeric", month:"long", day:"numeric" }); }
+    catch(e){ return ""; }
+  }
+  function formatTime(ts){
+    try { return new Date(ts).toLocaleTimeString("fa-IR", { hour:"2-digit", minute:"2-digit" }); }
     catch(e){ return ""; }
   }
 
@@ -129,6 +133,10 @@
             <div class="label">تاریخ ثبت سفارش</div>
             <div class="value">${formatDate(order.createdAt)}</div>
           </div>
+          <div class="info-block">
+            <div class="label">ساعت ثبت سفارش</div>
+            <div class="value">${formatTime(order.createdAt)}</div>
+          </div>
         </div>
 
         <table>
@@ -174,6 +182,10 @@
         return;
       }
       render(data.order);
+
+      if(params.get("auto") === "1"){
+        setTimeout(() => { window.print(); }, 400);
+      }
     } catch(err){
       showError("مشکلی پیش اومد: " + err.message);
     }

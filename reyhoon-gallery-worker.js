@@ -13,8 +13,31 @@ const PAGE_SIZE = 5;
 
 const DEFAULT_SETTINGS = { fee18: 20, fee24: 4 };
 
-// آدرس سایت فروشگاه (برای ساخت لینک فاکتور که تو تلگرام فرستاده می‌شه) — اینو با دامنه واقعی سایتت جایگزین کن
-const SITE_URL = "https://reyhoongoldgallery.pages.dev";
+// آدرس سایت فروشگاه (برای ساخت لینک فاکتور که تو تلگرام فرستاده می‌شه)
+// نکته مهم: این مقدار قبلاً هاردکد و روی یه دامنه‌ی اشتباه/قدیمی بود، برای همین لینک فاکتور
+// تو ربات کار نمی‌کرد ولی برای مشتری (که از مسیر نسبی داخل همون سایت میره) مشکلی نداشت.
+// حالا از متغیر محیطی SITE_URL (تو wrangler.toml یا داشبورد Cloudflare) خونده می‌شه.
+const SITE_URL_FALLBACK = "https://reyhoongoldgallery.pages.dev";
+function siteUrl(env) {
+  return (env.SITE_URL || SITE_URL_FALLBACK).replace(/\/$/, "");
+}
+
+function orderStatusLabel(status) {
+  return {
+    pending: "در انتظار بررسی",
+    in_progress: "در حال انجام",
+    completed: "تکمیل شده",
+    rejected: "رد شده",
+  }[status] || status;
+}
+
+function buildInvoiceUrl(order, env, opts) {
+  opts = opts || {};
+  let url = siteUrl(env) + "/invoice.html?ticket=" + order.ticketNumber + "&token=" + order.invoiceToken;
+  if (opts.auto) url += "&auto=1";
+  return url;
+}
+
 
 // ============================================================
 //  همکاران ادمین و سطوح دسترسی
@@ -848,7 +871,7 @@ async function handleInvoiceData(request, env) {
   if (!raw) return jsonResponse({ error: "سفارش پیدا نشد." }, 404);
   const order = JSON.parse(raw);
 
-  if (order.status !== "approved") {
+  if (order.status !== "in_progress" && order.status !== "completed") {
     return jsonResponse({ error: "فاکتور فقط بعد از تایید سفارش صادر می‌شه." }, 403);
   }
 
@@ -877,17 +900,20 @@ async function handleOrderDecision(data, chatId, messageId, env) {
 
   if (order.status !== "pending") {
     await editMessage(chatId, messageId,
-      "این سفارش قبلاً " + (order.status === "approved" ? "تایید" : "رد") + " شده.", env);
+      "این سفارش قبلاً " + orderStatusLabel(order.status) + " شده.", env);
     return;
   }
 
   if (approve) {
-    order.status = "approved";
+    order.status = "in_progress";
     await env.SHOP_DB.put("order:" + ticketNumber, JSON.stringify(order));
-    const invoiceUrl = SITE_URL + "/invoice.html?ticket=" + ticketNumber + "&token=" + order.invoiceToken;
+    const invoiceUrl = buildInvoiceUrl(order, env, { auto: true });
     await editMessage(chatId, messageId,
-      "✅ سفارش #" + ticketNumber + " تایید شد.\nموجودی انبار همون‌طوری که کم شده بود می‌مونه.", env,
-      [[{ text: "🧾 مشاهده / دانلود فاکتور", url: invoiceUrl }]]);
+      "✅ سفارش #" + ticketNumber + " تایید شد و رفت رو حالت «در حال انجام».\nموجودی انبار همون‌طوری که کم شده بود می‌مونه.", env,
+      [
+        [{ text: "🧾 مشاهده / دانلود فاکتور", url: invoiceUrl }],
+        [{ text: "✅ تکمیل شد", callback_data: "completeorder:" + ticketNumber }],
+      ]);
   } else {
     order.status = "rejected";
     await env.SHOP_DB.put("order:" + ticketNumber, JSON.stringify(order));
@@ -901,6 +927,150 @@ async function handleOrderDecision(data, chatId, messageId, env) {
   }
 }
 
+// ============================================================
+//  مدیریت سفارش‌ها (در حال انجام / تکمیل‌شده) — لیست، جزئیات، تکمیل، حذف
+// ============================================================
+async function listOrdersByStatus(status, env) {
+  const list = await env.SHOP_DB.list({ prefix: "order:" });
+  const orders = [];
+  for (const key of list.keys) {
+    const raw = await env.SHOP_DB.get(key.name);
+    if (!raw) continue;
+    const order = JSON.parse(raw);
+    if (order.status === status) orders.push(order);
+  }
+  orders.sort((a, b) => b.createdAt - a.createdAt);
+  return orders;
+}
+
+async function deleteOrder(ticketNumber, env) {
+  const raw = await env.SHOP_DB.get("order:" + ticketNumber);
+  if (raw) {
+    const order = JSON.parse(raw);
+    if (order.accountPhone) {
+      const idxRaw = await env.SHOP_DB.get("orders_by_phone:" + order.accountPhone);
+      if (idxRaw) {
+        const filtered = JSON.parse(idxRaw).filter((tn) => tn !== ticketNumber);
+        await env.SHOP_DB.put("orders_by_phone:" + order.accountPhone, JSON.stringify(filtered));
+      }
+    }
+  }
+  await env.SHOP_DB.delete("order:" + ticketNumber);
+}
+
+function ordersMenuKeyboard() {
+  return [
+    [{ text: "🚚 سفارش‌های در حال انجام", callback_data: "ordlist:in_progress:0" }],
+    [{ text: "✅ سفارش‌های تکمیل‌شده", callback_data: "ordlist:completed:0" }],
+    [{ text: "⏳ در انتظار تایید", callback_data: "ordlist:pending:0" }, { text: "❌ رد شده", callback_data: "ordlist:rejected:0" }],
+    [{ text: "🏠 منو", callback_data: "menu" }],
+  ];
+}
+
+async function editOrdersMenuMessage(chatId, messageId, env) {
+  await editMessage(chatId, messageId, "📦 مدیریت سفارش‌ها\nیکی از وضعیت‌ها رو انتخاب کن:", env, ordersMenuKeyboard());
+}
+
+const ORDER_LIST_TITLE = {
+  pending: "⏳ سفارش‌های در انتظار تایید",
+  in_progress: "🚚 سفارش‌های در حال انجام",
+  completed: "✅ سفارش‌های تکمیل‌شده",
+  rejected: "❌ سفارش‌های رد شده",
+};
+
+function formatOrderDate(ts) {
+  try {
+    const d = new Date(ts);
+    return d.toLocaleDateString("fa-IR") + " - " + d.toLocaleTimeString("fa-IR", { hour: "2-digit", minute: "2-digit" });
+  } catch (e) {
+    return "";
+  }
+}
+
+async function editOrderListMessage(chatId, messageId, env, status, page) {
+  const orders = await listOrdersByStatus(status, env);
+  const start = page * PAGE_SIZE;
+  const pageOrders = orders.slice(start, start + PAGE_SIZE);
+
+  let text;
+  const keyboard = [];
+
+  if (orders.length === 0) {
+    text = ORDER_LIST_TITLE[status] + "\nچیزی تو این لیست نیست.";
+  } else {
+    text = ORDER_LIST_TITLE[status] + " (" + orders.length + " مورد):";
+    pageOrders.forEach((o) => {
+      keyboard.push([{
+        text: "#" + o.ticketNumber + " — " + o.name + " (" + formatOrderDate(o.createdAt) + ")",
+        callback_data: "ordview:" + status + ":" + o.ticketNumber + ":" + page,
+      }]);
+      const actionRow = [];
+      if (status === "completed") {
+        actionRow.push({ text: "🧾 فاکتور", url: buildInvoiceUrl(o, env, { auto: true }) });
+      }
+      actionRow.push({ text: "🗑 حذف", callback_data: "orddel:" + o.ticketNumber + ":" + status + ":" + page });
+      keyboard.push(actionRow);
+    });
+  }
+
+  const navRow = [];
+  if (page > 0) navRow.push({ text: "« قبلی", callback_data: "ordlist:" + status + ":" + (page - 1) });
+  if (start + PAGE_SIZE < orders.length) navRow.push({ text: "بعدی »", callback_data: "ordlist:" + status + ":" + (page + 1) });
+  if (navRow.length) keyboard.push(navRow);
+
+  keyboard.push([{ text: "« بازگشت", callback_data: "ordersmenu" }, { text: "🏠 منو", callback_data: "menu" }]);
+
+  await editMessage(chatId, messageId, text, env, keyboard);
+}
+
+async function editOrderDetailMessage(chatId, messageId, env, status, ticketNumber, page) {
+  const raw = await env.SHOP_DB.get("order:" + ticketNumber);
+  if (!raw) {
+    await editMessage(chatId, messageId, "این سفارش پیدا نشد (شاید حذف شده).", env, [[{ text: "« بازگشت", callback_data: "ordlist:" + status + ":" + page }, { text: "🏠 منو", callback_data: "menu" }]]);
+    return;
+  }
+  const order = JSON.parse(raw);
+  const itemLines = order.items.map((it) => "- " + it.name + " (" + it.karat + " عیار، " + it.weight + " گرم) x" + it.qty).join("\n");
+
+  const text =
+    "🧾 سفارش #" + order.ticketNumber + " — " + orderStatusLabel(order.status) + "\n\n" +
+    "نام: " + order.name + "\n" +
+    "تماس: " + order.phone + "\n" +
+    "آدرس: " + order.address + "\n" +
+    "تاریخ و ساعت ثبت: " + formatOrderDate(order.createdAt) + "\n\n" +
+    "اقلام:\n" + itemLines + "\n\n" +
+    "جمع کل: " + toToman(order.total) + " تومان";
+
+  const keyboard = [];
+  if (order.status === "in_progress") {
+    keyboard.push([{ text: "🧾 فاکتور", url: buildInvoiceUrl(order, env, { auto: true }) }, { text: "✅ تکمیل شد", callback_data: "completeorder:" + order.ticketNumber }]);
+  } else if (order.status === "completed") {
+    keyboard.push([{ text: "🧾 فاکتور", url: buildInvoiceUrl(order, env, { auto: true }) }]);
+  }
+  keyboard.push([{ text: "🗑 حذف سفارش", callback_data: "orddel:" + order.ticketNumber + ":" + status + ":" + page }]);
+  keyboard.push([{ text: "« بازگشت", callback_data: "ordlist:" + status + ":" + page }, { text: "🏠 منو", callback_data: "menu" }]);
+
+  await editMessage(chatId, messageId, text, env, keyboard);
+}
+
+async function handleCompleteOrder(chatId, messageId, ticketNumber, env) {
+  const raw = await env.SHOP_DB.get("order:" + ticketNumber);
+  if (!raw) {
+    await editMessage(chatId, messageId, "این سفارش پیدا نشد (شاید حذف شده).", env, [[{ text: "🏠 منو", callback_data: "menu" }]]);
+    return;
+  }
+  const order = JSON.parse(raw);
+  if (order.status !== "in_progress") {
+    await editMessage(chatId, messageId, "این سفارش الان تو وضعیت «در حال انجام» نیست.", env, [[{ text: "🏠 منو", callback_data: "menu" }]]);
+    return;
+  }
+  order.status = "completed";
+  await env.SHOP_DB.put("order:" + ticketNumber, JSON.stringify(order));
+  const invoiceUrl = buildInvoiceUrl(order, env, { auto: true });
+  await editMessage(chatId, messageId,
+    "✅ سفارش #" + ticketNumber + " تکمیل شد.", env,
+    [[{ text: "🧾 مشاهده / دانلود فاکتور", url: invoiceUrl }], [{ text: "✅ لیست سفارش‌های تکمیل‌شده", callback_data: "ordlist:completed:0" }, { text: "🏠 منو", callback_data: "menu" }]]);
+}
 
 // ============================================================
 //  پشتیبان‌گیری (Backup)
@@ -1534,6 +1704,57 @@ async function handleCallbackQuery(cq, env) {
     return;
   }
 
+  if (data.startsWith("completeorder:")) {
+    const ticketNumber = parseInt(data.split(":")[1]);
+    await handleCompleteOrder(chatId, messageId, ticketNumber, env);
+    return;
+  }
+
+  if (data === "ordersmenu") {
+    await editOrdersMenuMessage(chatId, messageId, env);
+    return;
+  }
+
+  if (data.startsWith("ordlist:")) {
+    const parts = data.split(":");
+    const status = parts[1];
+    const page = parseInt(parts[2]) || 0;
+    await editOrderListMessage(chatId, messageId, env, status, page);
+    return;
+  }
+
+  if (data.startsWith("ordview:")) {
+    const parts = data.split(":");
+    const status = parts[1];
+    const ticketNumber = parseInt(parts[2]);
+    const page = parseInt(parts[3]) || 0;
+    await editOrderDetailMessage(chatId, messageId, env, status, ticketNumber, page);
+    return;
+  }
+
+  if (data.startsWith("orddelconfirm:")) {
+    const parts = data.split(":");
+    const ticketNumber = parseInt(parts[1]);
+    const status = parts[2];
+    const page = parseInt(parts[3]) || 0;
+    await deleteOrder(ticketNumber, env);
+    await editMessage(chatId, messageId, "🗑 سفارش #" + ticketNumber + " حذف شد.", env,
+      [[{ text: "« بازگشت به لیست", callback_data: "ordlist:" + status + ":" + page }, { text: "🏠 منو", callback_data: "menu" }]]);
+    return;
+  }
+
+  if (data.startsWith("orddel:")) {
+    const parts = data.split(":");
+    const ticketNumber = parseInt(parts[1]);
+    const status = parts[2];
+    const page = parseInt(parts[3]) || 0;
+    await editMessage(chatId, messageId, "❗️ مطمئنی می‌خوای سفارش #" + ticketNumber + " رو کامل حذف کنی؟ این کار قابل بازگشت نیست.", env, [
+      [{ text: "✅ بله، حذفش کن", callback_data: "orddelconfirm:" + ticketNumber + ":" + status + ":" + page }],
+      [{ text: "انصراف", callback_data: "ordlist:" + status + ":" + page }],
+    ]);
+    return;
+  }
+
   if (data === "dobackup") {
     await editMessage(chatId, messageId, "در حال تهیه بک‌آپ...", env);
     await runBackup(env, "دستی");
@@ -1980,6 +2201,8 @@ function dashboardKeyboard(role) {
   row3.push({ text: "🎫 تیکت‌های باز", callback_data: "tickets:0" });
   rows.push(row3);
 
+  rows.push([{ text: "📦 مدیریت سفارش‌ها", callback_data: "ordersmenu" }]);
+
   if (level >= 3) {
     rows.push([{ text: "🏷 کدهای تخفیف", callback_data: "discounts" }]);
   }
@@ -2336,7 +2559,7 @@ async function handleOrderLookup(text, chatId, env) {
   }
   const order = JSON.parse(raw);
   await sendMessage(chatId,
-    "تیکت #" + order.ticketNumber + " - وضعیت: " + order.status + "\n" +
+    "تیکت #" + order.ticketNumber + " - وضعیت: " + orderStatusLabel(order.status) + "\n" +
     order.name + " - " + order.phone + "\n" + order.address, env);
 }
 
