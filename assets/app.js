@@ -478,6 +478,12 @@
   }
 
   function addToCart(id){
+    if(!(window.ReyhoonAuth && window.ReyhoonAuth.isLoggedIn())){
+      if(confirm("برای افزودن محصول به سبد خرید باید وارد حساب کاربری بشی.\nمیخوای الان بری صفحه ورود؟")){
+        location.href = "account.html";
+      }
+      return false;
+    }
     const product = PRODUCTS.find(p => p.id === id);
     if(!product) return false;
     const line = cart.find(l => l.product.id === id);
