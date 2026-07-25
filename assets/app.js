@@ -18,6 +18,7 @@
       { href: anchor("#calculator"), label: "محاسبه قیمت" },
       { href: anchor("#trust"), label: "چرا ما" },
       { href: anchor("#contact"), label: "تماس" },
+      { href: "support.html", label: "پشتیبانی" },
     ];
   }
 
@@ -103,6 +104,7 @@
   const GALLERY_API_URL = "https://reyhoongoldgallery.tempmail41245.workers.dev";
   // سفارش‌ها هم الان توی همین وورکر گالری هندل می‌شه (وورکر جدای orders دیگه لازم نیست)
   const ORDERS_API_URL = GALLERY_API_URL;
+  window.ORDERS_API_URL = ORDERS_API_URL;
 
   async function fetchGallery(){
     if(!GALLERY_API_URL) return;
@@ -935,6 +937,17 @@
       const user = window.ReyhoonAuth.getUser();
       const phoneInput = document.getElementById("ckPhone");
       if(phoneInput && !phoneInput.value && user && user.phone) phoneInput.value = user.phone;
+      const shipping = user && user.shipping;
+      if(shipping){
+        const nameInput = document.getElementById("ckName");
+        const emailInput = document.getElementById("ckEmail");
+        const postalInput = document.getElementById("ckPostalCode");
+        const addressInput = document.getElementById("ckAddress");
+        if(nameInput && !nameInput.value && shipping.name) nameInput.value = shipping.name;
+        if(emailInput && !emailInput.value && shipping.email) emailInput.value = shipping.email;
+        if(postalInput && !postalInput.value && shipping.postalCode) postalInput.value = shipping.postalCode;
+        if(addressInput && !addressInput.value && shipping.address) addressInput.value = shipping.address;
+      }
     }
     stepForm.style.display = "block";
     stepSuccess.style.display = "none";
@@ -966,12 +979,16 @@
     checkoutSubmit.addEventListener("click", async () => {
       const name = document.getElementById("ckName").value.trim();
       const phone = document.getElementById("ckPhone").value.trim();
+      const email = document.getElementById("ckEmail").value.trim();
+      const postalCode = document.getElementById("ckPostalCode").value.trim();
       const address = document.getElementById("ckAddress").value.trim();
 
       const nameOk = validateField("fieldName", name.length >= 2);
       const phoneOk = validateField("fieldPhone", /^0?9\d{9}$/.test(phone.replace(/\s/g, "")));
+      const emailOk = validateField("fieldEmail", /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email));
+      const postalOk = validateField("fieldPostalCode", /^\d{10}$/.test(postalCode.replace(/\s/g, "")));
       const addressOk = validateField("fieldAddress", address.length >= 5);
-      if(!nameOk || !phoneOk || !addressOk) return;
+      if(!nameOk || !phoneOk || !emailOk || !postalOk || !addressOk) return;
 
       const orderItems = cart.map(l => ({
         id: l.product.id,
@@ -988,6 +1005,8 @@
 `سفارش جدید از ریحون گلد گالری
 نام: ${name}
 تماس: ${phone}
+ایمیل: ${email}
+کدپستی: ${postalCode}
 آدرس: ${address}
 
 اقلام:
@@ -1012,7 +1031,7 @@ ${discountText}
             method: "POST",
             headers,
             body: JSON.stringify({
-              name, phone, address, items: orderItems,
+              name, phone, email, postalCode, address, items: orderItems,
               subtotal: cartTotal(),
               discountCode: appliedDiscount ? appliedDiscount.code : undefined,
               total: cartFinalTotal(),
