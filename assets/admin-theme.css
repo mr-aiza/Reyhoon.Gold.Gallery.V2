@@ -1,0 +1,207 @@
+/* ============================================================
+   ریحون گلد گالری — قالب اختصاصی پنل مدیریت
+   بر پایه‌ی Bootstrap 5 + AdminLTE 4 — با پوسته‌ی طلایی سفارشی
+   شامل حالت روشن/تاریک، ویجت‌های داشبورد، جدول‌ها، لاگین و ...
+   ============================================================ */
+
+:root{
+  --rg-gold:#c9a24b;
+  --rg-gold-light:#e2c07d;
+  --rg-gold-dark:#a9822f;
+  --rg-ink:#1c1a14;
+  --rg-ink-soft:#2a2416;
+  --rg-bg:#f4f1ea;
+  --rg-card-bg:#ffffff;
+  --rg-card-border:#ece5d5;
+  --rg-text-muted:#8a8270;
+  --rg-radius:.85rem;
+  --rg-shadow:0 6px 24px rgba(28,26,20,.06);
+  --rg-shadow-hover:0 12px 32px rgba(28,26,20,.12);
+  --rg-transition:.18s ease;
+}
+
+html[data-rg-theme="dark"]{
+  --rg-bg:#141210;
+  --rg-card-bg:#1d1a13;
+  --rg-card-border:#332c1c;
+  --rg-text-muted:#a89c7c;
+  --rg-ink:#f4efe2;
+  color-scheme: dark;
+}
+
+html,body{
+  font-family:'Vazirmatn', Tahoma, sans-serif;
+  background:var(--rg-bg);
+  transition:background var(--rg-transition);
+}
+html[data-rg-theme="dark"] body{ color:#ece5d5; }
+html[data-rg-theme="dark"] .card,
+html[data-rg-theme="dark"] .modal-content{
+  background:var(--rg-card-bg);
+  color:#ece5d5;
+  border-color:var(--rg-card-border);
+}
+html[data-rg-theme="dark"] .table{ color:#ece5d5; }
+html[data-rg-theme="dark"] .table thead th{ border-color:var(--rg-card-border); }
+html[data-rg-theme="dark"] .table td, html[data-rg-theme="dark"] .table th{ border-color:var(--rg-card-border); }
+html[data-rg-theme="dark"] .form-control, html[data-rg-theme="dark"] .form-select{
+  background:#252017; color:#ece5d5; border-color:#3a3222;
+}
+html[data-rg-theme="dark"] .form-control:focus, html[data-rg-theme="dark"] .form-select:focus{
+  border-color:var(--rg-gold); box-shadow:0 0 0 .2rem rgba(201,162,75,.2);
+}
+html[data-rg-theme="dark"] .app-content-header,
+html[data-rg-theme="dark"] .app-header{ background:#1a1712!important; border-color:var(--rg-card-border)!important; }
+html[data-rg-theme="dark"] .text-muted{ color:var(--rg-text-muted)!important; }
+html[data-rg-theme="dark"] .list-group-item{ background:transparent; color:#ece5d5; border-color:var(--rg-card-border); }
+
+/* ---------------- سایدبار ---------------- */
+.app-sidebar{
+  background:linear-gradient(180deg,#161410,#221d14);
+  box-shadow: 4px 0 24px rgba(0,0,0,.25);
+}
+.app-sidebar .brand-link{ border-color:rgba(201,162,75,.25); }
+.app-sidebar .brand-image, .app-sidebar .brand-text{ letter-spacing:.02em; }
+.app-sidebar .nav-link{ color:#e7ddc7!important; border-radius:.55rem; margin:.1rem .5rem; transition:background var(--rg-transition), transform var(--rg-transition); }
+.app-sidebar .nav-link:hover{ background:rgba(201,162,75,.18)!important; transform:translateX(-2px); }
+.app-sidebar .nav-link.active{
+  background:linear-gradient(135deg,var(--rg-gold),var(--rg-gold-dark))!important;
+  color:#1c1a14!important; font-weight:700;
+  box-shadow:0 4px 14px rgba(201,162,75,.35);
+}
+.app-sidebar .nav-icon{ transition:transform var(--rg-transition); }
+.app-sidebar .nav-link:hover .nav-icon{ transform:scale(1.1); }
+
+/* ---------------- عناصر عمومی ---------------- */
+.btn-gold, .btn-gold:hover{ background:var(--rg-gold); border-color:var(--rg-gold); color:#1c1a14; font-weight:600; }
+.btn-gold:hover{ background:var(--rg-gold-dark); border-color:var(--rg-gold-dark); box-shadow:0 4px 14px rgba(201,162,75,.35); }
+.btn-outline-gold{ border:1px solid var(--rg-gold-dark); color:var(--rg-gold-dark); background:transparent; }
+.btn-outline-gold:hover{ background:var(--rg-gold); color:#1c1a14; border-color:var(--rg-gold); }
+.text-gold{ color:var(--rg-gold-dark)!important; }
+
+.card-gold{
+  border:1px solid var(--rg-card-border);
+  border-top:3px solid var(--rg-gold);
+  border-radius:var(--rg-radius);
+  box-shadow:var(--rg-shadow);
+  transition:box-shadow var(--rg-transition), transform var(--rg-transition);
+  background:var(--rg-card-bg);
+}
+.card-gold:hover{ box-shadow:var(--rg-shadow-hover); }
+
+/* ---------------- کارت‌های آماری داشبورد ---------------- */
+.small-box{
+  border-radius:var(--rg-radius);
+  overflow:hidden;
+  position:relative;
+  box-shadow:var(--rg-shadow);
+  transition:transform var(--rg-transition), box-shadow var(--rg-transition);
+}
+.small-box:hover{ transform:translateY(-3px); box-shadow:var(--rg-shadow-hover); }
+.small-box .small-box-icon{ opacity:.28; font-size:3.6rem; top:8px; }
+.small-box .inner h3{ font-weight:800; }
+.small-box .inner p{ opacity:.92; font-size:.85rem; margin-bottom:0; }
+
+/* ---------------- نشان‌های وضعیت ---------------- */
+.badge-pending{ background:#f0ad4e; }
+.badge-in_progress{ background:#5bc0de; }
+.badge-completed{ background:#5cb85c; }
+.badge-rejected{ background:#d9534f; }
+
+/* ---------------- جدول‌ها ---------------- */
+.table thead th{
+  white-space:nowrap;
+  font-size:.78rem;
+  text-transform:none;
+  color:var(--rg-text-muted);
+  border-bottom-width:2px;
+}
+.table-hover tbody tr{ transition:background var(--rg-transition); }
+.thumb{ width:42px; height:42px; object-fit:cover; border-radius:8px; box-shadow:0 2px 6px rgba(0,0,0,.15); }
+
+/* ---------------- صفحه‌بندی سفارشی ---------------- */
+.rg-pagination{ display:flex; align-items:center; justify-content:space-between; gap:.5rem; padding:.6rem .9rem; font-size:.82rem; color:var(--rg-text-muted); }
+.rg-pagination .rg-page-btns{ display:flex; gap:.35rem; }
+
+/* ---------------- جستجوی سریع ---------------- */
+.rg-search-box{ position:relative; max-width:260px; }
+.rg-search-box i{ position:absolute; top:50%; right:.7rem; transform:translateY(-50%); color:var(--rg-text-muted); font-size:.85rem; }
+.rg-search-box input{ padding-right:2rem; }
+
+/* ---------------- صفحه‌ی ورود ---------------- */
+#loginScreen{
+  position:fixed; inset:0; z-index:2000;
+  background:radial-gradient(circle at 30% 20%, #2a2416, #100e0a 70%);
+  display:flex; align-items:center; justify-content:center;
+}
+.login-card{
+  width:100%; max-width:380px;
+  background:#1c1a14;
+  border:1px solid rgba(201,162,75,.35);
+  border-radius:16px;
+  padding:2.2rem;
+  box-shadow:0 24px 70px rgba(0,0,0,.55);
+  animation: rg-fade-up .35s ease;
+}
+@keyframes rg-fade-up{ from{ opacity:0; transform:translateY(14px);} to{ opacity:1; transform:translateY(0);} }
+.login-card h1{ color:var(--rg-gold); font-size:1.5rem; text-align:center; margin-bottom:.25rem; }
+.login-card p{ color:#a99; text-align:center; font-size:.85rem; margin-bottom:1.5rem; }
+.login-card .form-control{ background:#262114; border-color:#3a3222; color:#eee; }
+.login-card .form-control:focus{ border-color:var(--rg-gold); box-shadow:0 0 0 .2rem rgba(201,162,75,.25); }
+#loginError{ color:#e57373; font-size:.85rem; margin-top:.6rem; text-align:center; min-height:1.2em; }
+
+/* ---------------- تب‌های داخلی/ویو ---------------- */
+.view{ display:none; animation: rg-fade-in .25s ease; }
+.view.active{ display:block; }
+@keyframes rg-fade-in{ from{opacity:0;} to{opacity:1;} }
+
+.app-main .content-header{ padding-bottom:0; }
+
+/* ---------------- toast ---------------- */
+.toast-wrap{ position:fixed; top:15px; left:15px; z-index:3000; display:flex; flex-direction:column; gap:.5rem; }
+.toast-wrap .alert{ animation: rg-fade-up .2s ease; border-radius:.6rem; }
+
+/* ---------------- لاگ فعالیت (Audit log) ---------------- */
+.rg-activity-item{
+  display:flex; gap:.75rem; padding:.65rem 0;
+  border-bottom:1px dashed var(--rg-card-border);
+}
+.rg-activity-item:last-child{ border-bottom:0; }
+.rg-activity-dot{
+  width:10px; height:10px; border-radius:50%;
+  background:var(--rg-gold); margin-top:.35rem; flex:none;
+  box-shadow:0 0 0 4px rgba(201,162,75,.15);
+}
+.rg-activity-body strong{ font-size:.88rem; }
+.rg-activity-body small{ color:var(--rg-text-muted); }
+
+/* ---------------- سوییچ حالت تاریک/روشن ---------------- */
+.rg-theme-toggle{
+  border:1px solid rgba(0,0,0,.1);
+  background:transparent;
+  border-radius:50px;
+  width:38px; height:38px;
+  display:inline-flex; align-items:center; justify-content:center;
+  transition: background var(--rg-transition);
+}
+.rg-theme-toggle:hover{ background:rgba(201,162,75,.15); }
+
+/* ---------------- اسکرول‌بار سفارشی ---------------- */
+*::-webkit-scrollbar{ width:8px; height:8px; }
+*::-webkit-scrollbar-thumb{ background:rgba(201,162,75,.45); border-radius:6px; }
+*::-webkit-scrollbar-thumb:hover{ background:rgba(201,162,75,.7); }
+
+/* ---------------- ریسپانسیو ---------------- */
+@media (max-width: 767px){
+  .small-box .inner h3{ font-size:1.4rem; }
+  .rg-search-box{ max-width:100%; }
+}
+
+/* ---------------- Skeleton loading ---------------- */
+.rg-skel{
+  background:linear-gradient(90deg, rgba(0,0,0,.05) 25%, rgba(0,0,0,.09) 37%, rgba(0,0,0,.05) 63%);
+  background-size:400% 100%;
+  animation: rg-skel-loop 1.4s ease infinite;
+  border-radius:.4rem;
+}
+@keyframes rg-skel-loop{ 0%{background-position:100% 50%;} 100%{background-position:0 50%;} }
