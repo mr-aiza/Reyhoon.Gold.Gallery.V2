@@ -1,0 +1,36 @@
+# ============================================================
+#  پیکربندی Worker پنل مدیریت (reyhoon-admin-worker.js)
+#  این وورکر جدا از وورکر اصلی فروشگاه دیپلوی می‌شه، ولی باید
+#  دقیقاً به همون KV Namespace وورکر اصلی وصل بشه.
+# ============================================================
+
+name = "reyhoon-admin"
+main = "reyhoon-admin-worker.js"
+compatibility_date = "2024-01-01"
+
+# همون namespace id ای که در wrangler.toml وورکر اصلی (reyhoon-gallery)
+# زیر SHOP_DB نوشته شده رو اینجا هم بگذار — باید دقیقاً یکی باشن.
+[[kv_namespaces]]
+binding = "SHOP_DB"
+id = "REPLACE_WITH_SAME_KV_NAMESPACE_ID_AS_MAIN_WORKER"
+
+[vars]
+# آدرس سایت (اختیاری، فقط برای لاگ‌ها/توضیحات استفاده می‌شه)
+SITE_URL = "https://REPLACE_WITH_YOUR_REAL_DOMAIN"
+
+# مدت اعتبار نشست ورود به پنل، به ساعت (اختیاری — پیش‌فرض ۱۲)
+ADMIN_SESSION_HOURS = "12"
+
+# دامنه‌ی مجاز برای CORS (اختیاری — پیش‌فرض «*»). بهتره دامنه‌ی
+# سایتت رو اینجا بگذاری، مثلاً: "https://bytelabpro.xyz"
+# ADMIN_ALLOWED_ORIGIN = "https://REPLACE_WITH_YOUR_REAL_DOMAIN"
+
+# ------------------------------------------------------------
+# این سه‌تا رو حتماً از داشبورد Cloudflare → Workers → این وورکر →
+# Settings → Variables and Secrets → Add Secret اضافه کن
+# (توی همین فایل ننویسشون، چون این‌ها محرمانه‌ن):
+#
+#   ADMIN_PANEL_PASSWORD   رمز عبور ورود به پنل وب مدیریت
+#   BOT_TOKEN              توکن ربات تلگرام (همون توکن وورکر اصلی)
+#   ADMIN_ID               چت‌آیدی مالک ربات تلگرام (همون وورکر اصلی)
+# ------------------------------------------------------------
