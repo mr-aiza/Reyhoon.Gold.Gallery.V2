@@ -109,6 +109,7 @@
                   <ul class="list-group list-group-flush">
                     <li class="list-group-item d-flex justify-content-between">تعداد محصولات <span id="statProducts" class="fw-bold">۰</span></li>
                     <li class="list-group-item d-flex justify-content-between">ناموجود <span id="statOutOfStock" class="fw-bold text-danger">۰</span></li>
+                    <li class="list-group-item d-flex justify-content-between">موجودی کم (≤۳ عدد) <span id="statLowStock" class="fw-bold text-danger">۰</span></li>
                     <li class="list-group-item d-flex justify-content-between">کاربران ثبت‌نامی <span id="statUsers" class="fw-bold">۰</span></li>
                     <li class="list-group-item d-flex justify-content-between">همکاران ربات تلگرام <span id="statCoAdmins" class="fw-bold">۰</span></li>
                     <li class="list-group-item d-flex justify-content-between">سفارش‌های تکمیل‌شده <span id="statCompleted" class="fw-bold text-success">۰</span></li>
@@ -125,6 +126,16 @@
               <table class="table table-hover mb-0">
                 <thead><tr><th>تیکت</th><th>مشتری</th><th>مبلغ</th><th>وضعیت</th><th>تاریخ</th></tr></thead>
                 <tbody id="recentOrdersBody"></tbody>
+              </table>
+            </div>
+          </div>
+
+          <div class="card card-gold d-none" id="lowStockCard">
+            <div class="card-header"><h3 class="card-title">اعلام موجودی کم</h3></div>
+            <div class="card-body p-0">
+              <table class="table table-hover mb-0">
+                <thead><tr><th>محصول</th><th>موجودی باقی‌مانده</th></tr></thead>
+                <tbody id="lowStockBody"></tbody>
               </table>
             </div>
           </div>
@@ -213,7 +224,7 @@
             </div>
             <div class="card-body p-0">
               <table class="table table-hover mb-0">
-                <thead><tr><th>شماره تماس</th><th>نام</th><th>آدرس ثبت‌شده</th><th>تاریخ عضویت</th><th>عملیات</th></tr></thead>
+                <thead><tr><th>شماره تماس</th><th>نام</th><th>آدرس ثبت‌شده</th><th>امتیاز</th><th>تاریخ عضویت</th><th>عملیات</th></tr></thead>
                 <tbody id="usersBody"></tbody>
               </table>
             </div>
@@ -307,7 +318,12 @@
                     <textarea class="form-control" id="broadcastMsg" rows="3" placeholder="متن پیام..."></textarea>
                   </div>
                   <button class="btn btn-gold w-100 mb-2" onclick="sendBroadcast()"><i class="bi bi-send"></i> ارسال پیام به مدیران</button>
-                  <button class="btn btn-outline-secondary w-100" onclick="triggerBackup()"><i class="bi bi-cloud-arrow-down"></i> ساخت بک‌آپ فوری و ارسال به تلگرام</button>
+                  <button class="btn btn-outline-secondary w-100 mb-2" onclick="triggerBackup()"><i class="bi bi-cloud-arrow-down"></i> ساخت بک‌آپ فوری و ارسال به تلگرام</button>
+                  <hr>
+                  <label class="form-label text-danger">بازگردانی از فایل بک‌آپ (Restore)</label>
+                  <p class="text-muted small">⚠️ کل دیتابیس فعلی (محصولات، سفارش‌ها، کاربران، تیکت‌ها، کدهای تخفیف) با محتوای این فایل جایگزین می‌شود. این عمل برگشت‌ناپذیره.</p>
+                  <input type="file" class="form-control mb-2" id="restoreFile" accept="application/json">
+                  <button class="btn btn-outline-danger w-100" onclick="restoreBackup()"><i class="bi bi-cloud-arrow-down"></i> بازگردانی بک‌آپ</button>
                 </div>
               </div>
             </div>
@@ -351,6 +367,21 @@
               <button class="btn btn-gold" onclick="saveSettings()">ذخیره تنظیمات</button>
             </div>
           </div>
+
+          <div class="card card-gold mt-3" style="max-width:480px;">
+            <div class="card-header"><h3 class="card-title">تنظیمات کد معرفی (رفرال)</h3></div>
+            <div class="card-body">
+              <div class="mb-3">
+                <label class="form-label">درصد تخفیف برای خریدار (کسی که کد رفرال رو استفاده می‌کند)</label>
+                <input type="number" class="form-control" id="referralBuyerDiscountPercent" step="0.5">
+              </div>
+              <div class="mb-3">
+                <label class="form-label">پاداش امتیازی برای معرف، به ازای هر سفارش موفق</label>
+                <input type="number" class="form-control" id="referralBonusPoints" step="1">
+              </div>
+              <button class="btn btn-gold" onclick="saveSettings()">ذخیره تنظیمات</button>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -378,7 +409,13 @@
         <input type="hidden" id="pId">
         <div class="mb-2"><label class="form-label">نام محصول</label><input class="form-control" id="pName"></div>
         <div class="row">
-          <div class="col-6 mb-2"><label class="form-label">دسته‌بندی</label><input class="form-control" id="pCategory" placeholder="مثلا: انگشتر"></div>
+          <div class="col-6 mb-2">
+            <label class="form-label">دسته‌بندی</label>
+            <div class="d-flex gap-2">
+              <select class="form-select" id="pCategory" style="flex:1"></select>
+              <button type="button" class="btn btn-outline-gold btn-sm" onclick="promptNewCategory()" title="دسته‌بندی جدید">+</button>
+            </div>
+          </div>
           <div class="col-6 mb-2"><label class="form-label">مدل</label><input class="form-control" id="pModel"></div>
         </div>
         <div class="row">
@@ -397,9 +434,9 @@
           <label class="form-check-label" for="pFeatured">نمایش در محصولات ویژه</label>
         </div>
         <div class="mb-2">
-          <label class="form-label">عکس محصول</label>
-          <input type="file" class="form-control" id="pImageFile" accept="image/*" onchange="handleImageFile(this)">
-          <img id="pImagePreview" class="mt-2 thumb" style="width:80px;height:80px;display:none;">
+          <label class="form-label">عکس‌های محصول (حداکثر ۸ تا، اولی = عکس اصلی)</label>
+          <input type="file" class="form-control" id="pImageFile" accept="image/*" multiple onchange="handleImageFiles(this)">
+          <div id="pImagesGrid" class="rg-image-grid mt-2"></div>
         </div>
       </div>
       <div class="modal-footer">
@@ -417,10 +454,35 @@
       <div class="modal-header"><h5 class="modal-title">کد تخفیف جدید</h5><button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
       <div class="modal-body">
         <div class="mb-2"><label class="form-label">کد</label><input class="form-control" id="dCode" style="text-transform:uppercase"></div>
-        <div class="mb-2"><label class="form-label">نوع</label>
-          <select class="form-select" id="dType"><option value="percent">درصدی</option><option value="fixed">مبلغ ثابت (تومان)</option></select>
+        <div class="mb-2"><label class="form-label">دسته‌ی کد تخفیف</label>
+          <select class="form-select" id="dKind" onchange="renderDiscountKindFields()">
+            <option value="simple">ساده (درصدی یا مبلغ ثابت)</option>
+            <option value="tiered">پلکانی / پلنی (بر اساس مبلغ سفارش)</option>
+            <option value="points">امتیازی (با کسر از امتیاز کاربر)</option>
+          </select>
+          <div class="form-text">برای «کد معرفی (رفرال)» نیازی به ساخت کد نیست؛ هر کاربر خودکار یک کد اختصاصی دارد که از صفحه‌ی تاریخچه‌ی کاربر قابل مشاهده/ساخت است.</div>
         </div>
-        <div class="mb-2"><label class="form-label">مقدار</label><input type="number" class="form-control" id="dValue"></div>
+
+        <div id="dSimpleFields">
+          <div class="mb-2"><label class="form-label">نوع</label>
+            <select class="form-select" id="dType"><option value="percent">درصدی</option><option value="fixed">مبلغ ثابت (تومان)</option></select>
+          </div>
+          <div class="mb-2"><label class="form-label">مقدار</label><input type="number" class="form-control" id="dValue"></div>
+        </div>
+
+        <div id="dPointsFields" class="d-none">
+          <div class="mb-2"><label class="form-label">هزینه‌ی امتیازی این کد</label><input type="number" class="form-control" id="dPointsCost" placeholder="مثلاً 100 امتیاز"></div>
+          <div class="mb-2"><label class="form-label">نوع تخفیف</label>
+            <select class="form-select" id="dPointsType"><option value="percent">درصدی</option><option value="fixed">مبلغ ثابت (تومان)</option></select>
+          </div>
+          <div class="mb-2"><label class="form-label">مقدار تخفیف</label><input type="number" class="form-control" id="dPointsValue"></div>
+        </div>
+
+        <div id="dTieredFields" class="d-none">
+          <label class="form-label">پله‌ها (بر اساس حداقل مبلغ سفارش — بیشترین پله‌ی واجد شرایط اعمال می‌شود)</label>
+          <div id="dTiersList"></div>
+          <button type="button" class="btn btn-sm btn-outline-gold mt-1" onclick="addTierRow()"><i class="bi bi-plus-lg"></i> افزودن پله</button>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" data-bs-dismiss="modal">انصراف</button>
@@ -430,7 +492,75 @@
   </div>
 </div>
 
-<!-- ==================== مودال افزودن همکار تلگرام ==================== -->
+<!-- ==================== مودال تاریخچه‌ی کاربر و گردش حساب ==================== -->
+<div class="modal fade" id="userHistoryModal" tabindex="-1">
+  <div class="modal-dialog modal-lg modal-dialog-scrollable">
+    <div class="modal-content">
+      <div class="modal-header">
+        <h5 class="modal-title">تاریخچه‌ی کاربر — <span id="uhPhone"></span></h5>
+        <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+      </div>
+      <div class="modal-body">
+        <div class="row g-2 mb-3">
+          <div class="col-4">
+            <div class="card card-gold p-2 text-center">
+              <div class="small text-muted">امتیاز فعلی</div>
+              <div class="fw-bold fs-5" id="uhPoints">۰</div>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="card card-gold p-2 text-center">
+              <div class="small text-muted">موجودی کیف پول</div>
+              <div class="fw-bold fs-5" id="uhWallet">۰ ت</div>
+            </div>
+          </div>
+          <div class="col-4">
+            <div class="card card-gold p-2 text-center">
+              <div class="small text-muted">کد معرفی (رفرال)</div>
+              <div class="fw-bold" id="uhReferral">—</div>
+              <button class="btn btn-sm btn-outline-gold mt-1" id="uhReferralBtn" onclick="generateReferralForCurrentUser()">ساخت کد</button>
+            </div>
+          </div>
+        </div>
+
+        <h6>ثبت تراکنش دستی در گردش حساب</h6>
+        <div class="row g-2 mb-3">
+          <div class="col-4">
+            <select class="form-select form-select-sm" id="uhUnit">
+              <option value="toman">تومان (کیف پول)</option>
+              <option value="point">امتیاز</option>
+            </select>
+          </div>
+          <div class="col-3"><input type="number" class="form-control form-control-sm" id="uhAmount" placeholder="مقدار (منفی = کسر)"></div>
+          <div class="col-3"><input type="text" class="form-control form-control-sm" id="uhNote" placeholder="توضیح"></div>
+          <div class="col-2"><button class="btn btn-sm btn-gold w-100" onclick="submitLedgerEntry()">ثبت</button></div>
+        </div>
+
+        <ul class="nav nav-tabs" role="tablist">
+          <li class="nav-item"><a class="nav-link active" data-bs-toggle="tab" href="#uhOrdersTab">سفارش‌ها</a></li>
+          <li class="nav-item"><a class="nav-link" data-bs-toggle="tab" href="#uhLedgerTab">گردش حساب</a></li>
+        </ul>
+        <div class="tab-content pt-2">
+          <div class="tab-pane fade show active" id="uhOrdersTab">
+            <table class="table table-sm">
+              <thead><tr><th>تیکت</th><th>مبلغ</th><th>وضعیت</th><th>تاریخ</th></tr></thead>
+              <tbody id="uhOrdersBody"></tbody>
+            </table>
+          </div>
+          <div class="tab-pane fade" id="uhLedgerTab">
+            <table class="table table-sm">
+              <thead><tr><th>نوع</th><th>مقدار</th><th>توضیح</th><th>تاریخ</th></tr></thead>
+              <tbody id="uhLedgerBody"></tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" data-bs-dismiss="modal">بستن</button>
+      </div>
+    </div>
+  </div>
+</div>
 <div class="modal fade" id="adminModal" tabindex="-1">
   <div class="modal-dialog">
     <div class="modal-content">
@@ -648,10 +778,18 @@ async function loadDashboard(){
     document.getElementById("statTickets").textContent = fmt(data.counts.openTickets);
     document.getElementById("statProducts").textContent = fmt(data.counts.totalProducts);
     document.getElementById("statOutOfStock").textContent = fmt(data.counts.outOfStock);
+    document.getElementById("statLowStock").textContent = fmt(data.counts.lowStock);
     document.getElementById("statUsers").textContent = fmt(data.counts.totalUsers);
     document.getElementById("statCoAdmins").textContent = fmt(data.counts.coAdminsCount);
     document.getElementById("statCompleted").textContent = fmt(data.counts.completedOrders);
     document.getElementById("statRejected").textContent = fmt(data.counts.rejectedOrders);
+
+    const lowStockCard = document.getElementById("lowStockCard");
+    const lowStockItems = data.lowStockItems || [];
+    lowStockCard.classList.toggle("d-none", lowStockItems.length === 0);
+    document.getElementById("lowStockBody").innerHTML = lowStockItems.map(it=>
+      "<tr><td>"+it.name+"</td><td class='text-danger fw-bold'>"+fmt(it.stock)+"</td></tr>"
+    ).join("");
 
     const tbody = document.getElementById("recentOrdersBody");
     tbody.innerHTML = data.recentOrders.map(o=>
@@ -779,15 +917,71 @@ function exportProductsCSV(){
   downloadCSV("products.csv", headers, rows);
 }
 let productModal;
+/* ---------------- دسته‌بندی‌ها ---------------- */
+let categoriesCache = [];
+async function loadCategories(){
+  try{
+    const data = await api("/categories");
+    categoriesCache = data.categories || [];
+  }catch(e){ /* بی‌اهمیت — فرم با لیست خالی هم کار می‌کنه */ }
+}
+function renderCategoryOptions(selected){
+  const sel = document.getElementById("pCategory");
+  sel.innerHTML = categoriesCache.map(c=>"<option value=\""+c+"\">"+c+"</option>").join("");
+  if(selected){
+    if(!categoriesCache.includes(selected)) sel.insertAdjacentHTML("beforeend", "<option value=\""+selected+"\">"+selected+"</option>");
+    sel.value = selected;
+  }
+}
+async function promptNewCategory(){
+  const name = prompt("نام دسته‌بندی جدید:");
+  if(!name || !name.trim()) return;
+  try{
+    const data = await api("/categories", { method:"POST", body: JSON.stringify({name: name.trim()}) });
+    categoriesCache = data.categories || categoriesCache;
+    renderCategoryOptions(name.trim());
+    toast("دسته‌بندی اضافه شد.");
+  }catch(e){ toast(e.message, "danger"); }
+}
+
+/* ---------------- عکس‌های محصول (چندتایی، مثل تلگرام) ---------------- */
+let pImagesList = [];
+function renderImagesGrid(){
+  const grid = document.getElementById("pImagesGrid");
+  grid.innerHTML = pImagesList.map((src, i)=>
+    "<div class='rg-image-thumb"+(i===0?" is-main":"")+"'>"+
+      "<img src='"+src+"'>"+
+      (i===0 ? "<span class='rg-image-main-tag'>اصلی</span>" : "")+
+      "<button type='button' class='rg-image-remove' onclick='removeProductImage("+i+")'>×</button>"+
+    "</div>"
+  ).join("");
+}
+function removeProductImage(i){ pImagesList.splice(i,1); renderImagesGrid(); }
+function handleImageFiles(input){
+  const files = Array.from(input.files || []);
+  if(!files.length) return;
+  let remaining = files.length;
+  files.forEach(file=>{
+    const reader = new FileReader();
+    reader.onload = function(e){
+      if(pImagesList.length < 8) pImagesList.push(e.target.result);
+      remaining--;
+      if(remaining === 0){ renderImagesGrid(); input.value = ""; }
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
 function openProductModal(id){
   productModal = productModal || new bootstrap.Modal(document.getElementById("productModal"));
   const isEdit = !!id;
   document.getElementById("productModalTitle").textContent = isEdit ? "ویرایش محصول" : "محصول جدید";
   document.getElementById("pId").value = id || "";
+  renderCategoryOptions();
   if(isEdit){
     const it = productsCache.find(x=>x.id===id);
     document.getElementById("pName").value = it.name || "";
-    document.getElementById("pCategory").value = it.category || "";
+    renderCategoryOptions(it.category || "");
     document.getElementById("pModel").value = it.model || "";
     document.getElementById("pKarat").value = it.karat || 18;
     document.getElementById("pWeight").value = it.weight || "";
@@ -795,28 +989,15 @@ function openProductModal(id){
     document.getElementById("pFee").value = it.makingFee != null ? it.makingFee : "";
     document.getElementById("pBadge").value = it.badge || "";
     document.getElementById("pFeatured").checked = !!it.featured;
-    const prev = document.getElementById("pImagePreview");
-    if(it.image){ prev.src = it.image; prev.style.display="inline-block"; } else { prev.style.display="none"; }
+    pImagesList = (it.images && it.images.length) ? it.images.slice() : (it.image ? [it.image] : []);
   } else {
-    ["pName","pCategory","pModel","pWeight","pStock","pFee","pBadge"].forEach(id=>document.getElementById(id).value="");
+    ["pName","pModel","pWeight","pStock","pFee","pBadge"].forEach(id=>document.getElementById(id).value="");
     document.getElementById("pKarat").value = 18;
     document.getElementById("pFeatured").checked = false;
-    document.getElementById("pImagePreview").style.display = "none";
+    pImagesList = [];
   }
-  window._pendingImage = null;
+  renderImagesGrid();
   productModal.show();
-}
-function handleImageFile(input){
-  const file = input.files[0];
-  if(!file) return;
-  const reader = new FileReader();
-  reader.onload = function(e){
-    window._pendingImage = e.target.result;
-    const prev = document.getElementById("pImagePreview");
-    prev.src = e.target.result;
-    prev.style.display = "inline-block";
-  };
-  reader.readAsDataURL(file);
 }
 async function saveProduct(){
   const id = document.getElementById("pId").value;
@@ -830,8 +1011,8 @@ async function saveProduct(){
     makingFee: document.getElementById("pFee").value,
     badge: document.getElementById("pBadge").value.trim(),
     featured: document.getElementById("pFeatured").checked,
+    images: pImagesList,
   };
-  if(window._pendingImage) payload.image = window._pendingImage;
   if(!payload.name || !payload.category || !payload.weight){ return toast("نام، دسته و وزن الزامیه.", "warning"); }
   try{
     if(id){ payload.id = id; await api("/products/update", { method:"POST", body: JSON.stringify(payload) }); }
@@ -872,7 +1053,9 @@ function renderOrders(){
     "</select></td>"+
     "<td><div class='input-group input-group-sm' style='min-width:150px'><input type='text' class='form-control' value=\""+(o.trackingCode||"")+"\" id='track_"+o.ticketNumber+"'><button class='btn btn-outline-secondary' onclick='saveTracking("+o.ticketNumber+")'><i class='bi bi-check'></i></button></div></td>"+
     "<td>"+fmtDate(o.createdAt)+"</td>"+
-    "<td><button class='btn btn-sm btn-outline-danger' onclick='deleteOrderRow("+o.ticketNumber+")'><i class='bi bi-trash'></i></button></td></tr>"
+    "<td>"+
+      (o.status==="completed" && o.invoiceToken ? "<a class='btn btn-sm btn-outline-gold me-1' target='_blank' href='invoice.html?ticket="+o.ticketNumber+"&token="+o.invoiceToken+"&auto=1' title='دانلود/چاپ فاکتور PDF'><i class='bi bi-file-earmark-spreadsheet'></i></a>" : "")+
+      "<button class='btn btn-sm btn-outline-danger' onclick='deleteOrderRow("+o.ticketNumber+")'><i class='bi bi-trash'></i></button></td></tr>"
   ).join("") || "<tr><td colspan='7' class='text-center text-muted py-3'>سفارشی نیست</td></tr>";
   renderPagination("ordersPagination", page, totalPages, "changeOrdersPage(-1)", "changeOrdersPage(1)");
 }
@@ -921,9 +1104,13 @@ function renderUsers(){
   document.getElementById("usersBody").innerHTML = items.map(u=>
     "<tr><td>"+u.phone+"</td><td>"+(u.name||"-")+"</td>"+
     "<td>"+(u.shipping ? (u.shipping.address||"-") : "-")+"</td>"+
+    "<td>"+fmt(u.points||0)+"</td>"+
     "<td>"+fmtDate(u.createdAt)+"</td>"+
-    "<td><button class='btn btn-sm btn-outline-danger' onclick=\"deleteUser('"+u.phone+"')\"><i class='bi bi-trash'></i></button></td></tr>"
-  ).join("") || "<tr><td colspan='5' class='text-center text-muted py-3'>کاربری ثبت نشده</td></tr>";
+    "<td>"+
+      "<button class='btn btn-sm btn-outline-gold me-1' onclick=\"openUserHistory('"+u.phone+"')\" title='تاریخچه و گردش حساب'><i class='bi bi-clock-history'></i></button>"+
+      "<button class='btn btn-sm btn-outline-danger' onclick=\"deleteUser('"+u.phone+"')\"><i class='bi bi-trash'></i></button>"+
+    "</td></tr>"
+  ).join("") || "<tr><td colspan='6' class='text-center text-muted py-3'>کاربری ثبت نشده</td></tr>";
   renderPagination("usersPagination", page, totalPages, "changeUsersPage(-1)", "changeUsersPage(1)");
 }
 function changeUsersPage(delta){ usersPage += delta; renderUsers(); }
@@ -934,8 +1121,8 @@ function filterUsers(q){
   renderUsers();
 }
 function exportUsersCSV(){
-  const headers = ["موبایل","نام","آدرس","تاریخ عضویت"];
-  const rows = usersCache.map(u=>[u.phone, u.name||"", u.shipping? (u.shipping.address||"") : "", fmtDate(u.createdAt)]);
+  const headers = ["موبایل","نام","آدرس","امتیاز","تاریخ عضویت"];
+  const rows = usersCache.map(u=>[u.phone, u.name||"", u.shipping? (u.shipping.address||"") : "", u.points||0, fmtDate(u.createdAt)]);
   downloadCSV("users.csv", headers, rows);
 }
 async function deleteUser(phone){
@@ -944,31 +1131,155 @@ async function deleteUser(phone){
   catch(e){ toast(e.message, "danger"); }
 }
 
+/* ---------------- تاریخچه‌ی کاربر و گردش حساب ---------------- */
+let userHistoryModal;
+let currentHistoryPhone = null;
+async function openUserHistory(phone){
+  currentHistoryPhone = phone;
+  userHistoryModal = userHistoryModal || new bootstrap.Modal(document.getElementById("userHistoryModal"));
+  document.getElementById("uhPhone").textContent = phone;
+  document.getElementById("uhOrdersBody").innerHTML = "<tr><td colspan='4' class='text-center text-muted py-3'>در حال بارگذاری...</td></tr>";
+  document.getElementById("uhLedgerBody").innerHTML = "";
+  document.getElementById("uhAmount").value = "";
+  document.getElementById("uhNote").value = "";
+  userHistoryModal.show();
+  try{
+    const data = await api("/users/history?phone="+encodeURIComponent(phone));
+    renderUserHistory(data);
+  }catch(e){ toast(e.message, "danger"); }
+}
+function renderUserHistory(data){
+  const u = data.user || {};
+  document.getElementById("uhPoints").textContent = fmt(u.points||0);
+  document.getElementById("uhWallet").textContent = fmt(u.walletBalance||0)+" ت";
+  document.getElementById("uhReferral").textContent = u.referralCode || "—";
+  document.getElementById("uhReferralBtn").style.display = u.referralCode ? "none" : "inline-block";
+
+  document.getElementById("uhOrdersBody").innerHTML = (data.orders||[]).map(o=>
+    "<tr><td>#"+o.ticketNumber+"</td><td>"+fmt(o.total)+" ت</td><td>"+orderStatusLabel(o.status)+"</td><td>"+fmtDate(o.createdAt)+"</td></tr>"
+  ).join("") || "<tr><td colspan='4' class='text-center text-muted py-3'>سفارشی ثبت نشده</td></tr>";
+
+  document.getElementById("uhLedgerBody").innerHTML = (data.ledger||[]).map(l=>
+    "<tr><td>"+(l.type==="credit"?"<span class='text-success'>واریز</span>":"<span class='text-danger'>برداشت</span>")+"</td>"+
+    "<td>"+fmt(l.amount)+" "+(l.unit==="point"?"امتیاز":"ت")+"</td><td>"+(l.note||"-")+"</td><td>"+fmtDate(l.ts)+"</td></tr>"
+  ).join("") || "<tr><td colspan='4' class='text-center text-muted py-3'>تراکنشی ثبت نشده</td></tr>";
+}
+async function submitLedgerEntry(){
+  if(!currentHistoryPhone) return;
+  const unit = document.getElementById("uhUnit").value;
+  const amount = document.getElementById("uhAmount").value;
+  const note = document.getElementById("uhNote").value.trim();
+  if(!amount || Number(amount)===0) return toast("مقدار تراکنش رو وارد کن.", "warning");
+  try{
+    const res = await api("/ledger/add", { method:"POST", body: JSON.stringify({ phone: currentHistoryPhone, unit, amount, note }) });
+    toast("تراکنش ثبت شد.");
+    document.getElementById("uhAmount").value = "";
+    document.getElementById("uhNote").value = "";
+    document.getElementById("uhPoints").textContent = fmt(res.points||0);
+    document.getElementById("uhWallet").textContent = fmt(res.walletBalance||0)+" ت";
+    document.getElementById("uhLedgerBody").innerHTML = (res.ledger||[]).map(l=>
+      "<tr><td>"+(l.type==="credit"?"<span class='text-success'>واریز</span>":"<span class='text-danger'>برداشت</span>")+"</td>"+
+      "<td>"+fmt(l.amount)+" "+(l.unit==="point"?"امتیاز":"ت")+"</td><td>"+(l.note||"-")+"</td><td>"+fmtDate(l.ts)+"</td></tr>"
+    ).join("") || "<tr><td colspan='4' class='text-center text-muted py-3'>تراکنشی ثبت نشده</td></tr>";
+    loadUsers();
+  }catch(e){ toast(e.message, "danger"); }
+}
+async function generateReferralForCurrentUser(){
+  if(!currentHistoryPhone) return;
+  try{
+    const res = await api("/users/referral", { method:"POST", body: JSON.stringify({ phone: currentHistoryPhone }) });
+    document.getElementById("uhReferral").textContent = res.referralCode;
+    document.getElementById("uhReferralBtn").style.display = "none";
+    toast("کد معرفی ساخته شد.");
+    loadUsers();
+  }catch(e){ toast(e.message, "danger"); }
+}
+
 /* ---------------- کدهای تخفیف ---------------- */
+function discountKindLabel(d){
+  if(d.kind==="tiered") return "پلکانی/پلنی";
+  if(d.kind==="points") return "امتیازی";
+  return d.type==="percent" ? "درصدی" : "مبلغ ثابت";
+}
+function discountValueLabel(d){
+  if(d.kind==="tiered") return (d.tiers||[]).map(t=>fmt(t.minTotal)+"+ ت → "+(t.type==="percent"?t.value+"%":fmt(t.value)+" ت")).join("، ") || "—";
+  if(d.kind==="points") return (d.pointsCost||0)+" امتیاز → "+(d.type==="percent"?d.value+"%":fmt(d.value)+" ت");
+  return d.type==="percent" ? d.value+"%" : fmt(d.value)+" ت";
+}
 async function loadDiscounts(){
   try{
     const data = await api("/discounts");
     document.getElementById("discountsBody").innerHTML = data.discounts.map(d=>
-      "<tr><td class='fw-bold'>"+d.code+"</td><td>"+(d.type==="percent"?"درصدی":"مبلغ ثابت")+"</td>"+
-      "<td>"+(d.type==="percent"?d.value+"%":fmt(d.value)+" ت")+"</td><td>"+fmt(d.usageCount||0)+"</td>"+
+      "<tr><td class='fw-bold'>"+d.code+"</td><td>"+discountKindLabel(d)+"</td>"+
+      "<td class='small'>"+discountValueLabel(d)+"</td><td>"+fmt(d.usageCount||0)+"</td>"+
       "<td><button class='btn btn-sm btn-outline-danger' onclick=\"deleteDiscountRow('"+d.code+"')\"><i class='bi bi-trash'></i></button></td></tr>"
     ).join("") || "<tr><td colspan='5' class='text-center text-muted py-3'>کد تخفیفی ثبت نشده</td></tr>";
   }catch(e){ toast(e.message, "danger"); }
 }
 let discountModal;
+let tierRows = [];
+function renderDiscountKindFields(){
+  const kind = document.getElementById("dKind").value;
+  document.getElementById("dSimpleFields").classList.toggle("d-none", kind!=="simple");
+  document.getElementById("dPointsFields").classList.toggle("d-none", kind!=="points");
+  document.getElementById("dTieredFields").classList.toggle("d-none", kind!=="tiered");
+}
+function addTierRow(minTotal, type, value){
+  const idx = tierRows.length;
+  tierRows.push(true);
+  const row = document.createElement("div");
+  row.className = "row g-1 align-items-center mb-1";
+  row.id = "tierRow"+idx;
+  row.innerHTML =
+    "<div class='col-4'><input type='number' class='form-control form-control-sm tier-min' placeholder='حداقل مبلغ (ت)' value='"+(minTotal||"")+"'></div>"+
+    "<div class='col-3'><select class='form-select form-select-sm tier-type'><option value='percent'"+(type==="fixed"?"":" selected")+">درصد</option><option value='fixed'"+(type==="fixed"?" selected":"")+">ثابت</option></select></div>"+
+    "<div class='col-3'><input type='number' class='form-control form-control-sm tier-value' placeholder='مقدار' value='"+(value||"")+"'></div>"+
+    "<div class='col-2'><button type='button' class='btn btn-sm btn-outline-danger' onclick=\"document.getElementById('tierRow"+idx+"').remove()\"><i class='bi bi-x'></i></button></div>";
+  document.getElementById("dTiersList").appendChild(row);
+}
 function openDiscountModal(){
   discountModal = discountModal || new bootstrap.Modal(document.getElementById("discountModal"));
   document.getElementById("dCode").value = "";
   document.getElementById("dValue").value = "";
   document.getElementById("dType").value = "percent";
+  document.getElementById("dKind").value = "simple";
+  document.getElementById("dPointsCost").value = "";
+  document.getElementById("dPointsValue").value = "";
+  document.getElementById("dPointsType").value = "percent";
+  document.getElementById("dTiersList").innerHTML = "";
+  tierRows = [];
+  addTierRow();
+  renderDiscountKindFields();
   discountModal.show();
 }
 async function saveDiscount(){
   const code = document.getElementById("dCode").value.trim().toUpperCase();
-  const type = document.getElementById("dType").value;
-  const value = document.getElementById("dValue").value;
-  if(!code || !value) return toast("کد و مقدار الزامیه.", "warning");
-  try{ await api("/discounts", { method:"POST", body: JSON.stringify({code, type, value}) }); discountModal.hide(); toast("کد تخفیف ثبت شد."); loadDiscounts(); }
+  const kind = document.getElementById("dKind").value;
+  if(!code) return toast("کد الزامیه.", "warning");
+
+  let payload = { code, kind };
+  if(kind==="simple"){
+    const type = document.getElementById("dType").value;
+    const value = document.getElementById("dValue").value;
+    if(!value) return toast("مقدار الزامیه.", "warning");
+    payload.type = type; payload.value = value;
+  } else if(kind==="points"){
+    const pointsCost = document.getElementById("dPointsCost").value;
+    const type = document.getElementById("dPointsType").value;
+    const value = document.getElementById("dPointsValue").value;
+    if(!pointsCost || !value) return toast("هزینه‌ی امتیازی و مقدار تخفیف الزامیه.", "warning");
+    payload.pointsCost = pointsCost; payload.type = type; payload.value = value;
+  } else if(kind==="tiered"){
+    const tiers = Array.from(document.querySelectorAll("#dTiersList > div")).map(row=>({
+      minTotal: row.querySelector(".tier-min").value,
+      type: row.querySelector(".tier-type").value,
+      value: row.querySelector(".tier-value").value,
+    }));
+    if(!tiers.some(t=>t.value)) return toast("حداقل یک پله‌ی معتبر لازمه.", "warning");
+    payload.tiers = tiers;
+  }
+
+  try{ await api("/discounts", { method:"POST", body: JSON.stringify(payload) }); discountModal.hide(); toast("کد تخفیف ثبت شد."); loadDiscounts(); }
   catch(e){ toast(e.message, "danger"); }
 }
 async function deleteDiscountRow(code){
@@ -1065,6 +1376,26 @@ async function triggerBackup(){
   try{ await api("/telegram/backup", { method:"POST" }); toast("بک‌آپ ساخته و به تلگرام ارسال شد."); }
   catch(e){ toast(e.message, "danger"); }
 }
+async function restoreBackup(){
+  const input = document.getElementById("restoreFile");
+  const file = input.files && input.files[0];
+  if(!file) return toast("اول یه فایل بک‌آپ JSON انتخاب کن.", "warning");
+
+  let text;
+  try{ text = await file.text(); JSON.parse(text); }
+  catch(e){ return toast("فایل انتخاب‌شده JSON معتبر نیست.", "danger"); }
+
+  if(!confirm("مطمئنی؟ کل دیتابیس فعلی (محصولات، سفارش‌ها، کاربران، تیکت‌ها، کدهای تخفیف) پاک و با این فایل جایگزین می‌شه. این عمل برگشت‌ناپذیره.")) return;
+  if(!confirm("یه بار دیگه تأیید کن — این آخرین هشداره. ادامه بدم؟")) return;
+
+  try{
+    await api("/backup/restore", { method:"POST", body: text });
+    toast("بازگردانی با موفقیت انجام شد.");
+    input.value = "";
+    loadDashboard();
+    loadCategories();
+  }catch(e){ toast(e.message, "danger"); }
+}
 
 /* ---------------- لاگ فعالیت‌ها ---------------- */
 function activityActionIcon(action){
@@ -1097,12 +1428,16 @@ async function loadSettings(){
     const data = await api("/settings");
     document.getElementById("fee18").value = data.settings.fee18;
     document.getElementById("fee24").value = data.settings.fee24;
+    document.getElementById("referralBuyerDiscountPercent").value = data.settings.referralBuyerDiscountPercent;
+    document.getElementById("referralBonusPoints").value = data.settings.referralBonusPoints;
   }catch(e){ toast(e.message, "danger"); }
 }
 async function saveSettings(){
   const fee18 = document.getElementById("fee18").value;
   const fee24 = document.getElementById("fee24").value;
-  try{ await api("/settings", { method:"POST", body: JSON.stringify({fee18, fee24}) }); toast("تنظیمات ذخیره شد."); }
+  const referralBuyerDiscountPercent = document.getElementById("referralBuyerDiscountPercent").value;
+  const referralBonusPoints = document.getElementById("referralBonusPoints").value;
+  try{ await api("/settings", { method:"POST", body: JSON.stringify({fee18, fee24, referralBuyerDiscountPercent, referralBonusPoints}) }); toast("تنظیمات ذخیره شد."); }
   catch(e){ toast(e.message, "danger"); }
 }
 
@@ -1116,6 +1451,7 @@ setInterval(tickClock, 30000);
 function boot(){
   tickClock();
   loadDashboard();
+  loadCategories();
 }
 
 if(getToken()){ hideLogin(); boot(); } else { showLogin(); }
