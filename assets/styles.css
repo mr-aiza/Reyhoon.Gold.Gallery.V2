@@ -257,7 +257,7 @@ input[type="range"]::-moz-range-thumb{ width:16px; height:16px; border-radius:50
 
 /* ===== Footer ===== */
 footer{ border-top:1px solid var(--border); margin-top:40px; }
-.footer-grid{ display:grid; grid-template-columns:repeat(3,1fr); gap:32px; padding:40px 20px; font-size:14px; }
+.footer-grid{ display:grid; grid-template-columns:repeat(auto-fit,minmax(150px,1fr)); gap:32px; padding:40px 20px; font-size:14px; }
 .footer-col .ft{ font-weight:600; margin-bottom:var(--sp-3); }
 .footer-col p{ color:var(--text-dim); line-height:1.9; }
 .footer-links{ display:flex; flex-direction:column; gap:var(--sp-2); }
