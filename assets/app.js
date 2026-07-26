@@ -181,23 +181,6 @@
     history = sparkWindowFromPoints(pricePoints);
   }
 
-  // کمترین و بیشترین قیمت واقعی توی همین بافر گردشی (برای نمایش بازه‌ی نوسان اخیر)
-  function recentPriceRange(){
-    if(!pricePoints.length) return null;
-    let min = pricePoints[0].p, max = pricePoints[0].p;
-    for(const pt of pricePoints){ if(pt.p < min) min = pt.p; if(pt.p > max) max = pt.p; }
-    return { min, max };
-  }
-
-  function renderRecentRange(){
-    const el = document.getElementById("dayRange");
-    if(!el) return;
-    const range = recentPriceRange();
-    if(!range || !priceReady){ el.style.display = "none"; return; }
-    el.style.display = "";
-    el.innerHTML = `بازه نوسان اخیر: <span class="num">${toToman(range.min)}</span> تا <span class="num">${toToman(range.max)}</span> تومان`;
-  }
-
   let pricePerGram = 38450000;
   let history = [];
   if(pricePoints.length){
@@ -217,7 +200,7 @@
   let undoTimer = null;
   let lastRemoved = null; // { line, index }
 
-  const toToman = n => Math.round(n).toLocaleString("fa-IR");
+  const toToman = n => Math.round(n).toLocaleString("en-US");
   let priceReady = pricePoints.length > 0; // داده‌ی واقعیِ ذخیره‌شده رو داریم، پس بلافاصله نشون بده
   const priceReadyCallbacks = [];
   const priceText = n => priceReady ? toToman(n) : "...";
@@ -306,7 +289,6 @@
   function refreshAllUI(){
     renderMainPrices();
     renderSparkline();
-    renderRecentRange();
     updatePriceChangeBadge();
     renderProducts();
     updateCalculator();
@@ -1224,7 +1206,6 @@ ${discountText}
   updatePriceChangeBadge();
   renderMainPrices();
   renderSparkline();
-  renderRecentRange();
   renderProducts();
   updateCalculator();
   renderCart();
