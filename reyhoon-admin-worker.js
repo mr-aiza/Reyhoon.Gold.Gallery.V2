@@ -163,6 +163,41 @@ async function getNextItemId(env) {
   return next;
 }
 
+// وقتی سفارشی رد/لغو می‌شه، موجودی اقلامش باید به انبار برگرده؛ و اگه یه سفارشِ
+// قبلاً رد/لغوشده دوباره فعال بشه (مثلاً از رد‌شده به در حال انجام)، باید دوباره کم بشه.
+// این دو تابع از reyhoon-gallery-worker.js پورت شدن تا پنل وب هم همون رفتار ربات تلگرام رو داشته باشه.
+async function decreaseStockForOrder(orderedItems, env) {
+  const items = await getItems(env);
+  let changed = false;
+  for (const ordered of orderedItems || []) {
+    if (ordered.id == null) continue;
+    const match = items.find((it) => it.id === ordered.id);
+    if (!match) continue;
+    if (typeof match.stock === "number") {
+      const qty = Number(ordered.qty) || 0;
+      match.stock = Math.max(0, match.stock - qty);
+      changed = true;
+    }
+  }
+  if (changed) await saveItems(items, env);
+}
+
+async function increaseStockForOrder(orderedItems, env) {
+  const items = await getItems(env);
+  let changed = false;
+  for (const ordered of orderedItems || []) {
+    if (ordered.id == null) continue;
+    const match = items.find((it) => it.id === ordered.id);
+    if (!match) continue;
+    if (typeof match.stock === "number") {
+      const qty = Number(ordered.qty) || 0;
+      match.stock = match.stock + qty;
+      changed = true;
+    }
+  }
+  if (changed) await saveItems(items, env);
+}
+
 // ---------------- دسته‌بندی‌های محصولات ----------------
 async function getCategories(env) {
   const raw = await env.SHOP_DB.get("categories");
@@ -924,6 +959,24 @@ async function handleOrderStatus(request, env) {
   order.updatedAt = Date.now();
   await saveOrder(order, env);
   await logActivity(env, "تغییر وضعیت سفارش #" + ticketNumber, prevStatus + " → " + status);
+
+  // موجودی انبار: دقیقاً همون رفتار ربات تلگرام — وقتی سفارش رد/لغو می‌شه موجودی برمی‌گرده،
+  // و اگه یه سفارشِ رد‌شده دوباره فعال بشه، دوباره از انبار کم می‌شه.
+  if (prevStatus !== "rejected" && status === "rejected") {
+    try {
+      await increaseStockForOrder(order.items, env);
+      await logActivity(env, "برگشت موجودی انبار سفارش #" + ticketNumber, "به‌خاطر رد/لغو سفارش از پنل");
+    } catch (err) {
+      // اگه برگردوندن موجودی خطا بده، وضعیت سفارش همچنان rejected ثبت می‌مونه
+    }
+  } else if (prevStatus === "rejected" && status !== "rejected") {
+    try {
+      await decreaseStockForOrder(order.items, env);
+      await logActivity(env, "کسر دوباره موجودی انبار سفارش #" + ticketNumber, "به‌خاطر فعال‌سازی دوباره سفارش رد‌شده");
+    } catch (err) {
+      // بی‌اثر
+    }
+  }
 
   if (status === "completed" || status === "rejected") {
     const label = status === "completed" ? "✅ تکمیل شد" : "❌ رد شد";
