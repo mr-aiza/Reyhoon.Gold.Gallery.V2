@@ -73,12 +73,15 @@
   // متن دکمه‌ی حساب کاربری رو بر اساس وضعیت لاگین (از assets/auth.js) به‌روز می‌کنه
   function updateAccountLabel(){
     const label = document.getElementById("accountLabel");
+    const btn = document.getElementById("accountBtn");
     if(!label) return;
     if(window.ReyhoonAuth && window.ReyhoonAuth.isLoggedIn()){
       const user = window.ReyhoonAuth.getUser();
       label.textContent = (user && user.name) ? user.name.split(" ")[0] : "حساب من";
+      if(btn) btn.setAttribute("href", "profile.html");
     } else {
       label.textContent = "ورود";
+      if(btn) btn.setAttribute("href", "account.html");
     }
   }
 

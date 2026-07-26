@@ -94,5 +94,31 @@
     }
   }
 
-  window.ReyhoonAuth = { getToken, getUser, isLoggedIn, saveSession, clearSession, apiFetch, register, login, logout, refreshUser };
+  // ویرایش نام/مشخصات ارسالی از داخل پروفایل (نه فقط موقع چک‌اوت)
+  async function updateProfile(profile) {
+    const data = await apiFetch("/api/auth/update-profile", {
+      method: "POST",
+      body: JSON.stringify(profile),
+    });
+    const token = getToken();
+    saveSession(token, { phone: data.phone, name: data.name, shipping: data.shipping || null });
+    return data;
+  }
+
+  async function changePassword(currentPassword, newPassword) {
+    return apiFetch("/api/auth/change-password", {
+      method: "POST",
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+  }
+
+  // کیف پول + امتیاز + کد معرفی + گردش حساب
+  async function getWallet() {
+    return apiFetch("/api/wallet/mine", { method: "GET" });
+  }
+
+  window.ReyhoonAuth = {
+    getToken, getUser, isLoggedIn, saveSession, clearSession, apiFetch,
+    register, login, logout, refreshUser, updateProfile, changePassword, getWallet,
+  };
 })();
