@@ -30,7 +30,6 @@
     const mobileNavHTML = links.map(l => `<a href="${l.href}" class="mobile-link${l.active ? ' active' : ''}">${l.label}</a>`).join("");
 
     root.innerHTML = `
-      <div class="ticker-wrap"><div class="ticker-track" id="tickerTrack"></div></div>
       <header id="siteHeader">
         <div class="container">
           <div class="brand" style="display:flex;align-items:center;gap:12px;">
@@ -136,8 +135,76 @@
   const LIVE_REFRESH_MS = 60000;
   let usingLiveData = false;
 
+  // ---------- Price history (تاریخچه‌ی گردشیِ قیمت) ----------
+  // به‌جای موج تصادفی، هر قیمتی که از API می‌آد با زمانش توی localStorage ذخیره می‌شه
+  // و هیچ‌وقت صفر نمی‌شه — یه بافر گردشی از آخرین MAX_POINTS قیمت واقعی همیشه نگه داشته می‌شه.
+  const PRICE_HISTORY_KEY = "reyhoon-gallery-gold-history-v1";
+  const MAX_POINTS = 100; // تعداد نقاطی که همیشه (به‌صورت گردشی) نگه داشته می‌شه
+  const SPARK_WINDOW = 30; // تعداد نقاطی که روی خود نمودار (اسپارک‌لاین) نشون داده می‌شه
+
+  function loadPricePoints(){
+    try{
+      const raw = localStorage.getItem(PRICE_HISTORY_KEY);
+      if(!raw) return [];
+      const saved = JSON.parse(raw);
+      const points = Array.isArray(saved) ? saved : (saved && Array.isArray(saved.points) ? saved.points : []);
+      return points.filter(p => p && typeof p.p === "number" && p.p > 0 && typeof p.t === "number");
+    } catch(err){ return []; }
+  }
+
+  let pricePoints = loadPricePoints(); // آخرین قیمت‌های واقعی، گردشی و بدون ریست روزانه
+
+  function savePricePoints(){
+    try{
+      localStorage.setItem(PRICE_HISTORY_KEY, JSON.stringify({ points: pricePoints }));
+    } catch(err){ /* localStorage غیرفعال باشه هم سایت کار می‌کنه */ }
+  }
+
+  // طول نمودار رو ثابت نگه می‌داره (آخرین N نقطه) تا انیمیشن نرم بین آپدیت‌ها خراب نشه
+  function sparkWindowFromPoints(points){
+    const windowed = points.slice(-SPARK_WINDOW).map(p => p.p);
+    if(windowed.length === 1) return [windowed[0], windowed[0]];
+    return windowed;
+  }
+
+  // قیمت جدید رو (اگه واقعاً با قیمت قبلی فرق داشته باشه) به بافر گردشی اضافه و ذخیره می‌کنه
+  function recordPricePoint(price){
+    const now = Date.now();
+    const last = pricePoints[pricePoints.length - 1];
+    if(last && last.p === price){
+      last.t = now; // قیمت تغییر نکرده، فقط زمان آخرین چک به‌روز می‌شه
+    } else {
+      pricePoints.push({ t: now, p: price });
+      if(pricePoints.length > MAX_POINTS) pricePoints = pricePoints.slice(-MAX_POINTS); // گردشی: فقط قدیمی‌ترین حذف می‌شه
+    }
+    savePricePoints();
+    history = sparkWindowFromPoints(pricePoints);
+  }
+
+  // کمترین و بیشترین قیمت واقعی توی همین بافر گردشی (برای نمایش بازه‌ی نوسان اخیر)
+  function recentPriceRange(){
+    if(!pricePoints.length) return null;
+    let min = pricePoints[0].p, max = pricePoints[0].p;
+    for(const pt of pricePoints){ if(pt.p < min) min = pt.p; if(pt.p > max) max = pt.p; }
+    return { min, max };
+  }
+
+  function renderRecentRange(){
+    const el = document.getElementById("dayRange");
+    if(!el) return;
+    const range = recentPriceRange();
+    if(!range || !priceReady){ el.style.display = "none"; return; }
+    el.style.display = "";
+    el.innerHTML = `بازه نوسان اخیر: <span class="num">${toToman(range.min)}</span> تا <span class="num">${toToman(range.max)}</span> تومان`;
+  }
+
   let pricePerGram = 38450000;
-  let history = Array.from({length:24}, (_,i) => 38450000 + Math.sin(i/3)*80000 + i*4000);
+  let history = [];
+  if(pricePoints.length){
+    // اگه از قبل داده‌ی ذخیره‌شده داشتیم، همون لحظه (قبل از رسیدن جواب API) نشون بده
+    history = sparkWindowFromPoints(pricePoints);
+    pricePerGram = pricePoints[pricePoints.length - 1].p;
+  }
   let cart = [];
   let appliedDiscount = null; // { code, type, value, label }
   let favoriteIds = new Set();
@@ -151,9 +218,8 @@
   let lastRemoved = null; // { line, index }
 
   const toToman = n => Math.round(n).toLocaleString("fa-IR");
-  let priceReady = false;
+  let priceReady = pricePoints.length > 0; // داده‌ی واقعیِ ذخیره‌شده رو داریم، پس بلافاصله نشون بده
   const priceReadyCallbacks = [];
-  let previousLivePrice = null;
   const priceText = n => priceReady ? toToman(n) : "...";
   const price24kVal = () => usingLiveData && live24k ? live24k : pricePerGram*1.33;
   const priceEmamiVal = () => usingLiveData && liveEmami ? liveEmami : pricePerGram*8.13;
@@ -175,18 +241,14 @@
       if(item18k && item18k.price){
         const newPrice = Number(item18k.price);
         if(!isNaN(newPrice) && newPrice > 0){
-          const delta = previousLivePrice !== null ? newPrice - previousLivePrice : null;
-          previousLivePrice = newPrice;
           pricePerGram = newPrice;
           live24k = item24k ? Number(item24k.price) : null;
           liveEmami = itemEmami ? Number(itemEmami.price) : null;
-          history.shift();
-          history.push(pricePerGram);
+          recordPricePoint(pricePerGram);
           usingLiveData = true;
           priceReady = true;
           updateLiveIndicator();
           refreshAllUI();
-          updatePriceChangeBadge(delta);
           priceReadyCallbacks.splice(0).forEach(cb => cb());
           return;
         }
@@ -209,18 +271,23 @@
     label.textContent = usingLiveData ? "قیمت زنده" : "در حال دریافت قیمت...";
   }
 
-  function updatePriceChangeBadge(delta){
+  // درصد تغییر رو دقیقاً بر اساس همون روندی که روی نمودار (اسپارک‌لاین) رسم می‌شه حساب می‌کنه:
+  // شروعِ بازه‌ی نمایش‌داده‌شده روی نمودار در برابر قیمت فعلی. صعودی=سبز، نزولی=قرمز.
+  function updatePriceChangeBadge(){
     const changeEl = document.getElementById("priceChange");
     const changeVal = document.getElementById("changeVal");
     if(!changeEl || !changeVal) return;
-    if(delta === null){
+    const windowStart = (history && history.length) ? history[0] : null;
+    if(!priceReady || !windowStart || windowStart <= 0){
       changeEl.style.display = "none";
       return;
     }
-    const positive = delta >= 0;
+    const pct = ((pricePerGram - windowStart) / windowStart) * 100;
+    const positive = pct >= 0;
     changeEl.style.display = "";
     changeEl.className = "price-change num " + (positive ? "up" : "down");
-    changeVal.textContent = (positive ? "+" : "") + toToman(delta);
+    const pctText = Math.abs(pct).toLocaleString("fa-IR", { minimumFractionDigits:1, maximumFractionDigits:1 });
+    changeVal.textContent = (positive ? "+" : "−") + pctText + "٪";
   }
 
   function renderMainPrices(){
@@ -230,12 +297,17 @@
     if(p24) p24.textContent = priceText(price24kVal());
     const pc = document.getElementById("priceCoin");
     if(pc) pc.textContent = priceText(priceEmamiVal());
+    const phc = document.getElementById("priceHalfCoin");
+    if(phc) phc.textContent = priceText(pricePerGram*4.06);
+    const pqc = document.getElementById("priceQuarterCoin");
+    if(pqc) pqc.textContent = priceText(pricePerGram*2.03);
   }
 
   function refreshAllUI(){
     renderMainPrices();
     renderSparkline();
-    renderTicker();
+    renderRecentRange();
+    updatePriceChangeBadge();
     renderProducts();
     updateCalculator();
     renderCart();
@@ -273,37 +345,81 @@
   }
   function productPrice(p){ return karatBaseRate(p.karat) * p.weight * (1 + p.makingFee/100); }
 
-  // ---------- Ticker ----------
-  function renderTicker(){
-    const track = document.getElementById("tickerTrack");
-    if(!track) return;
-    const items = [
-      { label:"طلای ۱۸ عیار (هر گرم)", val:pricePerGram },
-      { label:"طلای ۲۴ عیار (هر گرم)", val:price24kVal() },
-      { label:"سکه امامی", val:priceEmamiVal() },
-      { label:"نیم سکه", val:pricePerGram*4.06 },
-      { label:"ربع سکه", val:pricePerGram*2.03 },
-    ];
-    let groupHTML = items.map(it => `<span class="ticker-item"><span>${it.label}</span><span class="val num">${priceText(it.val)}</span><span class="unit">تومان</span></span>`).join("");
-    track.innerHTML = `<div class="ticker-group">${groupHTML}</div><div class="ticker-group">${groupHTML}</div>`;
-  }
 
   // ---------- Sparkline ----------
+  // به‌جای پرش یهویی به شکل جدید، خط از حالت قبلی به حالت جدید نرم animate می‌شه؛
+  // اولین بار هم با یه انیمیشن «کشیده شدن» ظاهر می‌شه، نه یهویی.
+  let sparklineAnimFrame = null;
+  let sparklineCurrentPts = null; // آخرین نقاطی که واقعاً روی صفحه‌ست (برای شروع انیمیشن بعدی)
+
+  function sparklinePoints(hist, w, h){
+    const min = Math.min(...hist), max = Math.max(...hist);
+    const range = (max - min) || 1;
+    return hist.map((v,i) => ({
+      x: (i/(hist.length-1)) * w,
+      y: h - ((v-min)/range) * h
+    }));
+  }
+
+  function ptsToStr(pts){
+    return pts.map(p => `${p.x.toFixed(2)},${p.y.toFixed(2)}`).join(" ");
+  }
+
+  function easeOutCubic(t){ return 1 - Math.pow(1 - t, 3); }
+
   function renderSparkline(){
     const svg = document.getElementById("sparkline");
     if(!svg) return;
-    if(!priceReady){ svg.innerHTML = ""; return; }
+    if(!priceReady){
+      svg.innerHTML = "";
+      sparklineCurrentPts = null;
+      if(sparklineAnimFrame){ cancelAnimationFrame(sparklineAnimFrame); sparklineAnimFrame = null; }
+      return;
+    }
+
     const w = 300, h = 36;
-    const min = Math.min(...history), max = Math.max(...history);
-    const range = (max - min) || 1;
-    const points = history.map((v,i) => {
-      const x = (i/(history.length-1)) * w;
-      const y = h - ((v-min)/range) * h;
-      return `${x},${y}`;
-    }).join(" ");
+    const target = sparklinePoints(history, w, h);
     const positive = (history[history.length-1] >= history[history.length-2]);
     const color = positive ? "#7A8471" : "#8B2E2E";
-    svg.innerHTML = `<polyline points="${points}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+
+    let line = svg.querySelector(".spark-line");
+
+    // رسم اولین بار: خط با انیمیشن «کشیده شدن» از چپ به راست ظاهر می‌شه
+    if(!line){
+      svg.innerHTML = `<polyline class="spark-line" points="${ptsToStr(target)}" fill="none" stroke="${color}" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>`;
+      line = svg.querySelector(".spark-line");
+      const len = (line.getTotalLength ? line.getTotalLength() : w) || w;
+      line.style.strokeDasharray = String(len);
+      line.style.strokeDashoffset = String(len);
+      // فورس ری‌فلو تا transition درست اجرا بشه
+      line.getBoundingClientRect();
+      line.style.transition = "stroke-dashoffset 900ms ease-out";
+      requestAnimationFrame(() => { line.style.strokeDashoffset = "0"; });
+      sparklineCurrentPts = target;
+      return;
+    }
+
+    line.setAttribute("stroke", color);
+
+    // آپدیت‌های بعدی: از شکل فعلی نرم به شکل جدید می‌ره، نه یه پرش یهویی
+    const from = (sparklineCurrentPts && sparklineCurrentPts.length === target.length) ? sparklineCurrentPts : target;
+    if(sparklineAnimFrame) cancelAnimationFrame(sparklineAnimFrame);
+    const duration = 700;
+    const start = performance.now();
+
+    function step(now){
+      const t = Math.min(1, (now - start) / duration);
+      const eased = easeOutCubic(t);
+      const current = target.map((p,i) => ({ x: p.x, y: from[i].y + (p.y - from[i].y) * eased }));
+      line.setAttribute("points", ptsToStr(current));
+      if(t < 1){
+        sparklineAnimFrame = requestAnimationFrame(step);
+      } else {
+        sparklineCurrentPts = target;
+        sparklineAnimFrame = null;
+      }
+    }
+    sparklineAnimFrame = requestAnimationFrame(step);
   }
 
   // ---------- Products ----------
@@ -1105,10 +1221,10 @@ ${discountText}
   // ---------- Init ----------
   renderSkeleton();
   loadCart();
-  updatePriceChangeBadge(null);
+  updatePriceChangeBadge();
   renderMainPrices();
-  renderTicker();
   renderSparkline();
+  renderRecentRange();
   renderProducts();
   updateCalculator();
   renderCart();
