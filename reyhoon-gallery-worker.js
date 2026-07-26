@@ -187,6 +187,17 @@ export default {
     if (url.pathname === "/api/auth/logout" && request.method === "POST") {
       return handleAuthLogout(request, env);
     }
+    if (url.pathname === "/api/auth/update-profile" && request.method === "POST") {
+      return handleUpdateProfile(request, env);
+    }
+    if (url.pathname === "/api/auth/change-password" && request.method === "POST") {
+      return handleChangePassword(request, env);
+    }
+
+    // ---- کیف پول، امتیاز وفاداری و کد معرفی کاربر لاگین‌کرده ----
+    if (url.pathname === "/api/wallet/mine" && request.method === "GET") {
+      return handleWalletMine(request, env);
+    }
 
     // ---- پیگیری سفارش‌های کاربر لاگین‌کرده ----
     if (url.pathname === "/api/orders/mine" && request.method === "GET") {
@@ -412,6 +423,104 @@ async function handleAuthLogout(request, env) {
   const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : null;
   if (token) await env.SHOP_DB.delete("session:" + token);
   return jsonResponse({ ok: true });
+}
+
+// کاربر لاگین‌کرده نام و مشخصات ارسالی خودش رو از پروفایل (نه فقط موقع چک‌اوت) ویرایش می‌کنه
+async function handleUpdateProfile(request, env) {
+  const account = await getUserFromRequest(request, env);
+  if (!account) return jsonResponse({ error: "وارد نشدی." }, 401);
+
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return jsonResponse({ error: "بدنه درخواست نامعتبره." }, 400);
+  }
+
+  const name = String(body.name || "").trim();
+  const email = String(body.email || "").trim();
+  const postalCode = String(body.postalCode || "").trim();
+  const address = String(body.address || "").trim();
+
+  if (email && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+    return jsonResponse({ error: "ایمیل معتبر نیست." }, 400);
+  }
+  if (postalCode && !/^\d{10}$/.test(postalCode)) {
+    return jsonResponse({ error: "کد پستی باید ۱۰ رقم باشه." }, 400);
+  }
+
+  const user = await getUserRaw(account.phone, env);
+  if (!user) return jsonResponse({ error: "کاربر پیدا نشد." }, 404);
+
+  user.name = name || user.name || null;
+  user.shipping = {
+    name: name || user.shipping?.name || "",
+    email: email || user.shipping?.email || "",
+    postalCode: postalCode || user.shipping?.postalCode || "",
+    address: address || user.shipping?.address || "",
+    updatedAt: Date.now(),
+  };
+  await saveUserRaw(user, env);
+
+  return jsonResponse(publicUser(user));
+}
+
+// تغییر رمز عبور از داخل پروفایل کاربر (نیازمند وارد کردن رمز فعلی برای امنیت بیشتر)
+async function handleChangePassword(request, env) {
+  const account = await getUserFromRequest(request, env);
+  if (!account) return jsonResponse({ error: "وارد نشدی." }, 401);
+
+  let body;
+  try {
+    body = await request.json();
+  } catch (e) {
+    return jsonResponse({ error: "بدنه درخواست نامعتبره." }, 400);
+  }
+
+  const currentPassword = String(body.currentPassword || "");
+  const newPassword = String(body.newPassword || "");
+  if (newPassword.length < 4) {
+    return jsonResponse({ error: "رمز عبور جدید باید حداقل ۴ کاراکتر باشه." }, 400);
+  }
+
+  const user = await getUserRaw(account.phone, env);
+  if (!user) return jsonResponse({ error: "کاربر پیدا نشد." }, 404);
+
+  const currentHash = await hashPassword(currentPassword, user.salt);
+  if (currentHash !== user.passwordHash) {
+    return jsonResponse({ error: "رمز عبور فعلی اشتباهه." }, 401);
+  }
+
+  const salt = generateRandomToken();
+  user.passwordHash = await hashPassword(newPassword, salt);
+  user.salt = salt;
+  await saveUserRaw(user, env);
+
+  return jsonResponse({ ok: true });
+}
+
+// خلاصه‌ی کیف پول/امتیاز/کد معرفی + گردش حساب کاربر لاگین‌کرده، برای صفحه پروفایل
+async function handleWalletMine(request, env) {
+  const account = await getUserFromRequest(request, env);
+  if (!account) return jsonResponse({ error: "وارد نشدی." }, 401);
+
+  const user = await getUserRaw(account.phone, env);
+  if (!user) return jsonResponse({ error: "کاربر پیدا نشد." }, 404);
+
+  let referralCode = user.referralCode;
+  try { referralCode = await ensureReferralCode(user, env); } catch (e) { /* بی‌اثر */ }
+
+  const ledger = await getLedger(account.phone, env);
+  const refSettings = await getSettings(env);
+
+  return jsonResponse({
+    points: user.points || 0,
+    walletBalance: user.walletBalance || 0,
+    referralCode,
+    referralBuyerDiscountPercent: refSettings.referralBuyerDiscountPercent,
+    referralBonusPoints: refSettings.referralBonusPoints,
+    ledger,
+  });
 }
 
 async function handleNewOrder(request, env) {
@@ -1066,8 +1175,12 @@ async function buildUserDetailView(phone, env) {
     "👤 " + (user.name || "بدون نام") + "\n" +
     "شماره تماس: " + user.phone + "\n" +
     "تاریخ عضویت: " + new Date(user.createdAt).toLocaleDateString("fa-IR") + "\n\n" +
+    "💰 موجودی کیف پول: " + toToman(user.walletBalance || 0) + " تومان\n" +
+    "🎯 امتیاز باشگاه مشتریان: " + (user.points || 0) +
+    (user.referralCode ? "\n🔗 کد معرفی: " + user.referralCode : "") + "\n\n" +
     "🧾 تعداد سفارش‌ها: " + ticketNumbers.length +
     (ticketNumbers.length ? "\nشماره تیکت‌ها: " + ticketNumbers.slice(0, 10).join("، ") : "") + "\n\n" +
+
     "❤️ علاقه‌مندی‌ها (" + favNames.length + "):\n" + (favNames.length ? favNames.join("\n") : "—") +
     shippingBlock;
 

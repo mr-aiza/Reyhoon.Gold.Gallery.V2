@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>پروفایل من | ریحون گلد گالری</title>
+<meta name="description" content="مدیریت حساب کاربری، سفارش‌ها، علاقه‌مندی‌ها، کیف پول، امتیاز باشگاه مشتریان و کد معرفی در ریحون گلد گالری.">
+<link rel="preconnect" href="https://cdnjs.cloudflare.com">
+<link href="https://cdnjs.cloudflare.com/ajax/libs/vazirmatn/33.0.3/Vazirmatn-font-face.css" rel="stylesheet">
+<link rel="stylesheet" href="assets/styles.css">
+<style>
+  /* ===== گیت (کاربر لاگین نیست) ===== */
+  .pf-gate{ max-width:420px; margin:0 auto; padding:60px 20px 100px; text-align:center; color:var(--text-dim); }
+  .pf-gate a{ color:var(--gold); }
+
+  /* ===== چیدمان کلی پروفایل ===== */
+  .profile-shell{ display:flex; gap:24px; max-width:1120px; margin:0 auto; padding:8px 20px 90px; align-items:flex-start; }
+  .profile-sidebar{ width:250px; flex-shrink:0; position:sticky; top:84px; }
+  .profile-user-card{ background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px; text-align:center; margin-bottom:14px; }
+  .profile-avatar{ width:56px; height:56px; border-radius:50%; background:var(--bg-card-2); border:1px solid var(--gold); color:var(--gold); font-size:20px; font-weight:700; display:flex; align-items:center; justify-content:center; margin:0 auto 10px; }
+  .profile-user-name{ font-weight:600; font-size:15px; }
+  .profile-user-phone{ font-size:12px; color:var(--text-dim); margin-top:2px; }
+  .profile-nav{ background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); overflow:hidden; display:flex; flex-direction:column; }
+  .pf-nav-btn{ display:flex; align-items:center; gap:8px; width:100%; padding:13px 16px; font-size:13.5px; color:var(--text-dim); border-bottom:1px solid var(--border); text-align:right; transition:background .15s, color .15s; }
+  .pf-nav-btn:last-child{ border-bottom:none; }
+  .pf-nav-btn:hover{ background:var(--bg-card-2); color:var(--cream); }
+  .pf-nav-btn.active{ color:var(--gold); background:var(--bg-card-2); font-weight:600; }
+  .pf-nav-btn.pf-logout{ color:var(--red-light); }
+
+  .profile-content{ flex:1; min-width:0; }
+  .pf-view{ display:none; animation:pfFadeIn .2s ease; }
+  .pf-view.active{ display:block; }
+  @keyframes pfFadeIn{ from{opacity:0;} to{opacity:1;} }
+  .pf-view h2{ font-size:18px; font-weight:600; margin-bottom:4px; }
+  .pf-subtitle{ font-size:13px; color:var(--text-dim); margin-bottom:18px; }
+
+  @media (max-width:860px){
+    .profile-shell{ flex-direction:column; padding-top:4px; }
+    .profile-sidebar{ width:100%; position:static; }
+    .profile-user-card{ display:flex; align-items:center; gap:12px; text-align:right; padding:14px 16px; }
+    .profile-avatar{ margin:0; flex-shrink:0; }
+    .profile-nav{ flex-direction:row; overflow-x:auto; }
+    .pf-nav-btn{ border-bottom:none; border-left:1px solid var(--border); white-space:nowrap; width:auto; }
+    .pf-nav-btn:last-child{ border-left:none; }
+  }
+
+  /* ===== کارت‌ها و گرید آماری ===== */
+  .pf-card{ background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:20px; margin-bottom:16px; }
+  .pf-card h3{ font-size:14.5px; font-weight:600; margin-bottom:14px; }
+  .pf-stat-grid{ display:grid; grid-template-columns:repeat(4,1fr); gap:14px; margin-bottom:18px; }
+  @media (max-width:700px){ .pf-stat-grid{ grid-template-columns:repeat(2,1fr); } }
+  .pf-stat-card{ background:var(--bg-card); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px; }
+  .pf-stat-card .v{ font-size:19px; font-weight:700; color:var(--gold); }
+  .pf-stat-card .l{ font-size:11.5px; color:var(--text-dim); margin-top:4px; }
+
+  /* ===== سفارش‌ها ===== */
+  .order-card{ background:var(--bg-card-2); border:1px solid var(--border); border-radius:var(--radius-lg); padding:16px 18px; margin-bottom:12px; }
+  .order-head{ display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+  .order-num{ font-weight:700; font-size:14px; }
+  .order-date{ font-size:11.5px; color:var(--text-dim); }
+  .order-status{ font-size:11.5px; font-weight:600; padding:4px 10px; border-radius:999px; }
+  .order-status.pending{ background:rgba(201,162,39,0.15); color:var(--gold); }
+  .order-status.approved{ background:rgba(122,148,113,0.18); color:var(--green-light); }
+  .order-status.in_progress{ background:rgba(201,162,39,0.18); color:var(--gold); }
+  .order-status.completed{ background:rgba(122,148,113,0.18); color:var(--green-light); }
+  .order-status.rejected{ background:rgba(176,107,86,0.18); color:var(--red-light); }
+  .order-items{ font-size:12.5px; color:var(--text-dim); line-height:2; margin:8px 0; }
+  .order-total{ display:flex; justify-content:space-between; font-size:13px; font-weight:600; border-top:1px solid var(--border); padding-top:8px; }
+  .pf-empty{ text-align:center; padding:30px 10px; color:var(--text-dim); font-size:13px; }
+
+  /* ===== علاقه‌مندی‌ها ===== */
+  .pf-fav-grid{ display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:12px; }
+  .pf-fav-card{ background:var(--bg-card-2); border:1px solid var(--border); border-radius:var(--radius-md); overflow:hidden; }
+  .pf-fav-art{ width:100%; aspect-ratio:1; }
+  .pf-fav-body{ padding:10px; }
+  .pf-fav-name{ font-size:12.5px; font-weight:600; margin-bottom:4px; line-height:1.4; }
+  .pf-fav-price{ font-size:12px; color:var(--gold); }
+  .pf-fav-actions{ display:flex; justify-content:space-between; align-items:center; margin-top:8px; }
+  .pf-fav-actions a{ font-size:11.5px; color:var(--text-dim); }
+  .pf-fav-remove{ font-size:11.5px; color:var(--red-light); }
+
+  /* ===== گردش حساب ===== */
+  .pf-ledger-item{ display:flex; justify-content:space-between; align-items:flex-start; gap:10px; padding:11px 0; border-bottom:1px dashed var(--border); font-size:12.5px; }
+  .pf-ledger-item:last-child{ border-bottom:none; }
+  .pf-ledger-note{ color:var(--text-dim); font-size:11.5px; margin-top:2px; }
+  .pf-ledger-date{ color:var(--text-faint); font-size:11px; }
+  .pf-amt{ font-weight:700; white-space:nowrap; }
+  .pf-amt.credit{ color:var(--green-light); }
+  .pf-amt.debit{ color:var(--red-light); }
+
+  /* ===== کد معرفی ===== */
+  .pf-ref-code{ display:flex; align-items:center; justify-content:space-between; gap:10px; background:var(--bg-card-2); border:1px dashed var(--gold); border-radius:var(--radius-md); padding:14px 16px; font-size:16px; font-weight:700; letter-spacing:1px; color:var(--gold); }
+  .pf-ref-actions{ display:flex; gap:10px; margin-top:14px; flex-wrap:wrap; }
+  .pf-ref-actions button, .pf-ref-actions a{ background:var(--gold); color:var(--bg); border-radius:var(--radius-md); padding:10px 16px; font-size:13px; font-weight:500; }
+  .pf-ref-actions .ghost{ background:transparent; border:1px solid var(--border); color:var(--cream); }
+  .pf-copy-msg{ font-size:12px; color:var(--green-light); margin-top:8px; min-height:1.2em; }
+
+  /* ===== فرم‌ها ===== */
+  .pf-msg{ font-size:12.5px; margin-top:-4px; display:none; }
+  .pf-msg.show{ display:block; }
+  .pf-msg.error{ color:var(--red-light); }
+  .pf-msg.success{ color:var(--gold); }
+</style>
+</head>
+<body>
+
+<div id="siteHeaderRoot"></div>
+
+<div class="breadcrumb"><a href="index.html">صفحه اصلی</a> / پروفایل من</div>
+
+<section class="page-hero">
+  <div class="container">
+    <h1>پروفایل من</h1>
+    <p>حساب، سفارش‌ها، کیف پول، امتیاز باشگاه مشتریان و علاقه‌مندی‌هات همه‌جا یه‌جا.</p>
+  </div>
+</section>
+
+<div class="pf-gate" id="pfGate">
+  برای دیدن پروفایلت اول باید <a href="account.html">وارد حساب</a> بشی.
+</div>
+
+<div class="profile-shell" id="profileShell" style="display:none;">
+
+  <aside class="profile-sidebar">
+    <div class="profile-user-card">
+      <div class="profile-avatar" id="pfAvatar">؟</div>
+      <div>
+        <div class="profile-user-name" id="pfName">کاربر ریحون گلد گالری</div>
+        <div class="profile-user-phone num" id="pfPhone">—</div>
+      </div>
+    </div>
+    <nav class="profile-nav" id="profileNav">
+      <button class="pf-nav-btn active" data-view="dashboard">📊 داشبورد</button>
+      <button class="pf-nav-btn" data-view="orders">🧾 سفارش‌های من</button>
+      <button class="pf-nav-btn" data-view="favorites">❤️ علاقه‌مندی‌ها</button>
+      <button class="pf-nav-btn" data-view="wallet">💰 کیف پول و امتیاز</button>
+      <button class="pf-nav-btn" data-view="referral">🔗 معرفی به دوستان</button>
+      <button class="pf-nav-btn" data-view="settings">⚙️ اطلاعات حساب</button>
+      <button class="pf-nav-btn" data-view="security">🔒 امنیت</button>
+      <a class="pf-nav-btn" href="support.html">🎧 پشتیبانی</a>
+      <button class="pf-nav-btn pf-logout" id="pfLogoutBtn">⏻ خروج از حساب</button>
+    </nav>
+  </aside>
+
+  <main class="profile-content">
+
+    <!-- ---------- داشبورد ---------- -->
+    <section class="pf-view active" id="pfview-dashboard">
+      <h2 id="pfGreeting">خوش اومدی 👋</h2>
+      <p class="pf-subtitle">یه نگاه سریع به وضعیت حساب کاربریت.</p>
+
+      <div class="pf-stat-grid">
+        <div class="pf-stat-card"><div class="v num" id="stWallet">۰</div><div class="l">موجودی کیف پول (تومان)</div></div>
+        <div class="pf-stat-card"><div class="v num" id="stPoints">۰</div><div class="l">امتیاز باشگاه مشتریان</div></div>
+        <div class="pf-stat-card"><div class="v num" id="stOrders">۰</div><div class="l">تعداد سفارش‌ها</div></div>
+        <div class="pf-stat-card"><div class="v num" id="stFavorites">۰</div><div class="l">علاقه‌مندی‌ها</div></div>
+      </div>
+
+      <div class="pf-card">
+        <h3>آخرین سفارش‌ها</h3>
+        <div id="pfRecentOrders"><div class="pf-empty">در حال بارگذاری...</div></div>
+        <button class="link-ghost" data-goto="orders" style="margin-top:6px;">مشاهده همه سفارش‌ها ‹</button>
+      </div>
+
+      <div class="pf-card">
+        <h3>🔗 کد معرفی تو</h3>
+        <p class="pf-subtitle" style="margin-bottom:12px;">این کد رو با دوستات به اشتراک بذار؛ هم اونا تخفیف می‌گیرن، هم تو امتیاز جایزه.</p>
+        <div class="pf-ref-code"><span id="pfDashRefCode">—</span></div>
+        <button class="link-ghost" data-goto="referral" style="margin-top:6px;">جزئیات بیشتر ‹</button>
+      </div>
+    </section>
+
+    <!-- ---------- سفارش‌های من ---------- -->
+    <section class="pf-view" id="pfview-orders">
+      <h2>سفارش‌های من</h2>
+      <p class="pf-subtitle">وضعیت سفارش‌هایی که با این حساب ثبت کردی.</p>
+      <div id="pfOrdersWrap"><div class="pf-empty">در حال بارگذاری...</div></div>
+    </section>
+
+    <!-- ---------- علاقه‌مندی‌ها ---------- -->
+    <section class="pf-view" id="pfview-favorites">
+      <h2>علاقه‌مندی‌های من</h2>
+      <p class="pf-subtitle">محصولاتی که با آیکون قلب ذخیره کردی.</p>
+      <div class="pf-fav-grid" id="pfFavGrid"><div class="pf-empty">در حال بارگذاری...</div></div>
+    </section>
+
+    <!-- ---------- کیف پول و امتیاز ---------- -->
+    <section class="pf-view" id="pfview-wallet">
+      <h2>کیف پول و امتیاز</h2>
+      <p class="pf-subtitle">موجودی و گردش حساب کیف پول و امتیاز باشگاه مشتریانت.</p>
+      <div class="pf-stat-grid" style="grid-template-columns:repeat(2,1fr);max-width:460px;">
+        <div class="pf-stat-card"><div class="v num" id="wWallet">۰</div><div class="l">موجودی کیف پول (تومان)</div></div>
+        <div class="pf-stat-card"><div class="v num" id="wPoints">۰</div><div class="l">امتیاز باشگاه مشتریان</div></div>
+      </div>
+      <div class="pf-card">
+        <h3>گردش حساب</h3>
+        <div id="pfLedger"><div class="pf-empty">در حال بارگذاری...</div></div>
+      </div>
+    </section>
+
+    <!-- ---------- معرفی به دوستان ---------- -->
+    <section class="pf-view" id="pfview-referral">
+      <h2>معرفی به دوستان</h2>
+      <p class="pf-subtitle" id="pfRefDesc">کد معرفی خودت رو با دوستات به اشتراک بذار.</p>
+      <div class="pf-card">
+        <h3>کد معرفی من</h3>
+        <div class="pf-ref-code"><span id="pfRefCode">—</span></div>
+        <div class="pf-ref-actions">
+          <button id="pfCopyRefBtn">📋 کپی کد</button>
+          <button id="pfShareRefBtn" class="ghost">↗ اشتراک‌گذاری</button>
+        </div>
+        <div class="pf-copy-msg" id="pfCopyMsg"></div>
+      </div>
+      <div class="pf-stat-grid" style="grid-template-columns:repeat(2,1fr);max-width:460px;">
+        <div class="pf-stat-card"><div class="v num" id="pfRefUses">۰</div><div class="l">تعداد دوستانی که با کد تو خرید کردن</div></div>
+        <div class="pf-stat-card"><div class="v num" id="pfRefPoints">۰</div><div class="l">امتیاز کسب‌شده از معرفی</div></div>
+      </div>
+    </section>
+
+    <!-- ---------- اطلاعات حساب ---------- -->
+    <section class="pf-view" id="pfview-settings">
+      <h2>اطلاعات حساب</h2>
+      <p class="pf-subtitle">اطلاعات پروفایل و آدرس ارسالت رو ویرایش کن؛ دفعه بعد خودکار تو فرم سفارش پر می‌شه.</p>
+      <div class="pf-card">
+        <form class="checkout-form" id="pfSettingsForm" style="padding:0;">
+          <div class="pf-msg" id="pfSettingsMsg"></div>
+          <div class="field">
+            <label for="pfName_">نام و نام خانوادگی</label>
+            <input type="text" id="pfName_" placeholder="مثلاً سارا محمدی">
+          </div>
+          <div class="field">
+            <label>شماره تماس</label>
+            <input type="text" id="pfPhone_" disabled style="opacity:.6;">
+          </div>
+          <div class="field">
+            <label for="pfEmail_">ایمیل</label>
+            <input type="email" id="pfEmail_" placeholder="example@mail.com">
+            <div class="field-error">ایمیل معتبر وارد کن</div>
+          </div>
+          <div class="field">
+            <label for="pfPostal_">کد پستی</label>
+            <input type="text" id="pfPostal_" placeholder="۱۰ رقمی" inputmode="numeric" maxlength="10">
+            <div class="field-error">کد پستی باید ۱۰ رقم باشه</div>
+          </div>
+          <div class="field">
+            <label for="pfAddress_">آدرس تحویل</label>
+            <textarea id="pfAddress_" rows="2" placeholder="شهر، خیابان، پلاک..."></textarea>
+          </div>
+          <button type="submit" class="checkout-submit" id="pfSettingsSubmit">ذخیره تغییرات</button>
+        </form>
+      </div>
+    </section>
+
+    <!-- ---------- امنیت ---------- -->
+    <section class="pf-view" id="pfview-security">
+      <h2>امنیت حساب</h2>
+      <p class="pf-subtitle">رمز عبورت رو از اینجا تغییر بده.</p>
+      <div class="pf-card">
+        <form class="checkout-form" id="pfPasswordForm" style="padding:0;">
+          <div class="pf-msg" id="pfPasswordMsg"></div>
+          <div class="field">
+            <label for="pfCurPass">رمز عبور فعلی</label>
+            <input type="password" id="pfCurPass" placeholder="رمز فعلی">
+          </div>
+          <div class="field">
+            <label for="pfNewPass">رمز عبور جدید</label>
+            <input type="password" id="pfNewPass" placeholder="حداقل ۴ کاراکتر">
+          </div>
+          <div class="field">
+            <label for="pfNewPass2">تکرار رمز عبور جدید</label>
+            <input type="password" id="pfNewPass2" placeholder="دوباره وارد کن">
+          </div>
+          <button type="submit" class="checkout-submit" id="pfPasswordSubmit">تغییر رمز عبور</button>
+        </form>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<script>window.PAGE_MODE = "full";</script>
+<script src="assets/auth.js"></script>
+<script src="assets/app.js"></script>
+<script>
+(function(){
+  const Auth = window.ReyhoonAuth;
+  const STATUS_LABEL = { pending: "در انتظار بررسی", approved: "تایید شده", in_progress: "در حال انجام", completed: "تکمیل شده", rejected: "رد شده" };
+
+  function toToman(n){ return Math.round(n || 0).toLocaleString("fa-IR"); }
+  function toFa(n){ return Number(n || 0).toLocaleString("fa-IR"); }
+  function formatDate(ts){
+    try { return new Date(ts).toLocaleDateString("fa-IR", { year:"numeric", month:"long", day:"numeric" }); }
+    catch(e){ return ""; }
+  }
+
+  if(!(Auth && Auth.isLoggedIn())){
+    document.getElementById("pfGate").style.display = "block";
+    document.getElementById("profileShell").style.display = "none";
+    return;
+  }
+  document.getElementById("pfGate").style.display = "none";
+  document.getElementById("profileShell").style.display = "flex";
+
+  // ---------- سایدبار / ناوبری تب‌ها ----------
+  const views = document.querySelectorAll(".pf-view");
+  const navBtns = document.querySelectorAll(".pf-nav-btn[data-view]");
+  function goto(view){
+    views.forEach(v => v.classList.toggle("active", v.id === "pfview-" + view));
+    navBtns.forEach(b => b.classList.toggle("active", b.dataset.view === view));
+    window.scrollTo({ top: document.querySelector(".profile-shell").offsetTop - 20, behavior: "smooth" });
+  }
+  navBtns.forEach(btn => btn.addEventListener("click", () => goto(btn.dataset.view)));
+  document.querySelectorAll("[data-goto]").forEach(btn => {
+    btn.addEventListener("click", () => goto(btn.dataset.goto));
+  });
+
+  document.getElementById("pfLogoutBtn").addEventListener("click", async () => {
+    await Auth.logout();
+    location.href = "account.html";
+  });
+
+  // ---------- اطلاعات کاربر (نام/شماره/آواتار) ----------
+  function renderUserHeader(user){
+    const name = (user && user.name) ? user.name : "کاربر ریحون گلد گالری";
+    document.getElementById("pfName").textContent = name;
+    document.getElementById("pfPhone").textContent = user ? user.phone : "";
+    document.getElementById("pfAvatar").textContent = name.trim().charAt(0) || "؟";
+    document.getElementById("pfGreeting").textContent = "سلام " + (user && user.name ? user.name.split(" ")[0] : "") + " 👋";
+    document.getElementById("pfPhone_").value = user ? user.phone : "";
+    document.getElementById("pfName_").value = (user && user.name) || "";
+    const s = user && user.shipping;
+    document.getElementById("pfEmail_").value = (s && s.email) || "";
+    document.getElementById("pfPostal_").value = (s && s.postalCode) || "";
+    document.getElementById("pfAddress_").value = (s && s.address) || "";
+  }
+  renderUserHeader(Auth.getUser());
+  Auth.refreshUser().then(renderUserHeader);
+
+  // ---------- سفارش‌ها ----------
+  let ordersCache = [];
+  function orderCardHTML(o){
+    const itemsHtml = (o.items || []).map(it => `${it.name} (${it.karat} عیار، ${it.weight} گرم) × ${it.qty}`).join("<br>");
+    const invoiceHtml = ["approved","in_progress","completed"].includes(o.status)
+      ? `<a class="link-ghost" href="invoice.html?ticket=${o.ticketNumber}" target="_blank" style="display:block;text-align:center;margin-top:8px;">🧾 دانلود فاکتور</a>` : "";
+    const trackingHtml = o.trackingCode
+      ? `<div class="order-total" style="border-top:none;padding-top:0;"><span>🚚 کد رهگیری پستی</span><span class="num">${o.trackingCode}</span></div>` : "";
+    return `
+      <div class="order-card">
+        <div class="order-head">
+          <span class="order-num">سفارش #${o.ticketNumber}</span>
+          <span class="order-status ${o.status}">${STATUS_LABEL[o.status] || o.status}</span>
+        </div>
+        <div class="order-date">${formatDate(o.createdAt)}</div>
+        <div class="order-items">${itemsHtml}</div>
+        <div class="order-total"><span>جمع کل</span><span class="num">${toToman(o.total)} تومان</span></div>
+        ${trackingHtml}
+        ${invoiceHtml}
+      </div>`;
+  }
+
+  async function loadOrders(){
+    try{
+      const data = await Auth.apiFetch("/api/orders/mine", { method: "GET" });
+      ordersCache = data.orders || [];
+      document.getElementById("stOrders").textContent = toFa(ordersCache.length);
+
+      const wrap = document.getElementById("pfOrdersWrap");
+      wrap.innerHTML = ordersCache.length ? ordersCache.map(orderCardHTML).join("") : `<div class="pf-empty">هنوز سفارشی ثبت نکردی.</div>`;
+
+      const recent = document.getElementById("pfRecentOrders");
+      recent.innerHTML = ordersCache.length ? ordersCache.slice(0,3).map(orderCardHTML).join("") : `<div class="pf-empty">هنوز سفارشی ثبت نکردی. از <a href="shop.html" style="color:var(--gold);">فروشگاه</a> دیدن کن.</div>`;
+    } catch(err){
+      document.getElementById("pfOrdersWrap").innerHTML = `<div class="pf-empty">مشکلی پیش اومد: ${err.message}</div>`;
+    }
+  }
+
+  // ---------- علاقه‌مندی‌ها ----------
+  async function loadFavorites(){
+    const shop = window.ReyhoonShop;
+    const grid = document.getElementById("pfFavGrid");
+    try{
+      const data = await Auth.apiFetch("/api/favorites/mine", { method: "GET" });
+      const items = data.items || [];
+      document.getElementById("stFavorites").textContent = toFa(items.length);
+
+      function render(){
+        if(!items.length){
+          grid.innerHTML = `<div class="pf-empty" style="grid-column:1/-1;">هنوز چیزی به علاقه‌مندی‌هات اضافه نکردی. از <a href="shop.html" style="color:var(--gold);">فروشگاه</a> با زدن آیکون قلب، محصول موردعلاقه‌ت رو ذخیره کن.</div>`;
+          return;
+        }
+        grid.innerHTML = items.map(p => `
+          <div class="pf-fav-card" data-id="${p.id}">
+            <div class="pf-fav-art">${shop ? shop.productVisual(p) : ""}</div>
+            <div class="pf-fav-body">
+              <div class="pf-fav-name">${p.name}</div>
+              <div class="pf-fav-price num">${shop ? shop.priceText(shop.productPrice(p)) + " تومان" : ""}</div>
+              <div class="pf-fav-actions">
+                <a href="shop.html">مشاهده در فروشگاه</a>
+                <button class="pf-fav-remove" data-remove="${p.id}">حذف</button>
+              </div>
+            </div>
+          </div>`).join("");
+
+        grid.querySelectorAll("[data-remove]").forEach(btn => {
+          btn.addEventListener("click", async () => {
+            const id = parseInt(btn.getAttribute("data-remove"));
+            if(shop) await shop.toggleFavorite(id);
+            else await Auth.apiFetch("/api/favorites/toggle", { method:"POST", body: JSON.stringify({ itemId: String(id) }) });
+            const idx = items.findIndex(p => p.id === id);
+            if(idx >= 0) items.splice(idx, 1);
+            document.getElementById("stFavorites").textContent = toFa(items.length);
+            render();
+          });
+        });
+      }
+      render();
+      if(shop) shop.onPriceReady(render);
+    } catch(err){
+      grid.innerHTML = `<div class="pf-empty" style="grid-column:1/-1;">مشکلی پیش اومد: ${err.message}</div>`;
+    }
+  }
+
+  // ---------- کیف پول، امتیاز و کد معرفی ----------
+  async function loadWallet(){
+    try{
+      const data = await Auth.getWallet();
+
+      document.getElementById("stWallet").textContent = toToman(data.walletBalance);
+      document.getElementById("stPoints").textContent = toFa(data.points);
+      document.getElementById("wWallet").textContent = toToman(data.walletBalance);
+      document.getElementById("wPoints").textContent = toFa(data.points);
+
+      document.getElementById("pfDashRefCode").textContent = data.referralCode || "—";
+      document.getElementById("pfRefCode").textContent = data.referralCode || "—";
+
+      const pct = data.referralBuyerDiscountPercent;
+      const bonus = data.referralBonusPoints;
+      const descParts = [];
+      if(pct) descParts.push(`دوستت با این کد ${toFa(pct)}٪ روی سفارشش تخفیف می‌گیره`);
+      if(bonus) descParts.push(`با اولین خرید دوستت، ${toFa(bonus)} امتیاز جایزه به حساب تو اضافه می‌شه`);
+      document.getElementById("pfRefDesc").textContent = descParts.length ? descParts.join(" و ") + "." : "کد معرفی خودت رو با دوستات به اشتراک بذار.";
+
+      const ledger = data.ledger || [];
+      const ledgerBox = document.getElementById("pfLedger");
+      ledgerBox.innerHTML = ledger.length ? ledger.map(e => {
+        const isCredit = e.type === "credit";
+        const unitLabel = e.unit === "point" ? "امتیاز" : "تومان";
+        const amountText = (isCredit ? "+" : "-") + toFa(e.amount) + " " + unitLabel;
+        return `
+          <div class="pf-ledger-item">
+            <div>
+              <div>${e.note || (isCredit ? "واریز" : "برداشت")}</div>
+              <div class="pf-ledger-date">${formatDate(e.ts)}</div>
+            </div>
+            <div class="pf-amt ${isCredit ? "credit" : "debit"} num">${amountText}</div>
+          </div>`;
+      }).join("") : `<div class="pf-empty">هنوز تراکنشی ثبت نشده.</div>`;
+
+      const referralEntries = ledger.filter(e => (e.note || "").includes("معرفی"));
+      document.getElementById("pfRefUses").textContent = toFa(referralEntries.length);
+      document.getElementById("pfRefPoints").textContent = toFa(referralEntries.reduce((s,e) => s + (e.unit === "point" ? e.amount : 0), 0));
+    } catch(err){
+      document.getElementById("pfLedger").innerHTML = `<div class="pf-empty">مشکلی پیش اومد: ${err.message}</div>`;
+    }
+  }
+
+  document.getElementById("pfCopyRefBtn").addEventListener("click", async () => {
+    const code = document.getElementById("pfRefCode").textContent;
+    const msg = document.getElementById("pfCopyMsg");
+    if(!code || code === "—") return;
+    try{
+      await navigator.clipboard.writeText(code);
+      msg.textContent = "کد کپی شد ✅";
+    } catch(e){
+      msg.textContent = "کد: " + code;
+    }
+    setTimeout(() => { msg.textContent = ""; }, 2500);
+  });
+
+  document.getElementById("pfShareRefBtn").addEventListener("click", async () => {
+    const code = document.getElementById("pfRefCode").textContent;
+    if(!code || code === "—") return;
+    const text = `با کد معرفی من "${code}" تو ریحون گلد گالری خرید کن و تخفیف بگیر: ${location.origin}`;
+    if(navigator.share){
+      try { await navigator.share({ text }); } catch(e) { /* کاربر لغو کرده */ }
+    } else {
+      try{
+        await navigator.clipboard.writeText(text);
+        document.getElementById("pfCopyMsg").textContent = "متن اشتراک‌گذاری کپی شد ✅";
+        setTimeout(() => { document.getElementById("pfCopyMsg").textContent = ""; }, 2500);
+      } catch(e){ /* بی‌اثر */ }
+    }
+  });
+
+  // ---------- ویرایش اطلاعات حساب ----------
+  function setMsg(el, text, type){
+    el.textContent = text;
+    el.className = "pf-msg show " + type;
+  }
+
+  document.getElementById("pfSettingsForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const msgEl = document.getElementById("pfSettingsMsg");
+    const btn = document.getElementById("pfSettingsSubmit");
+    const payload = {
+      name: document.getElementById("pfName_").value.trim(),
+      email: document.getElementById("pfEmail_").value.trim(),
+      postalCode: document.getElementById("pfPostal_").value.trim(),
+      address: document.getElementById("pfAddress_").value.trim(),
+    };
+    btn.disabled = true; btn.textContent = "در حال ذخیره...";
+    try{
+      await Auth.updateProfile(payload);
+      setMsg(msgEl, "اطلاعات با موفقیت ذخیره شد ✅", "success");
+      renderUserHeader(Auth.getUser());
+    } catch(err){
+      setMsg(msgEl, err.message || "ذخیره نشد. دوباره تلاش کن.", "error");
+    } finally {
+      btn.disabled = false; btn.textContent = "ذخیره تغییرات";
+    }
+  });
+
+  // ---------- تغییر رمز عبور ----------
+  document.getElementById("pfPasswordForm").addEventListener("submit", async (e) => {
+    e.preventDefault();
+    const msgEl = document.getElementById("pfPasswordMsg");
+    const btn = document.getElementById("pfPasswordSubmit");
+    const curPass = document.getElementById("pfCurPass").value;
+    const newPass = document.getElementById("pfNewPass").value;
+    const newPass2 = document.getElementById("pfNewPass2").value;
+
+    if(newPass.length < 4){ setMsg(msgEl, "رمز عبور جدید باید حداقل ۴ کاراکتر باشه.", "error"); return; }
+    if(newPass !== newPass2){ setMsg(msgEl, "تکرار رمز عبور مطابقت نداره.", "error"); return; }
+
+    btn.disabled = true; btn.textContent = "در حال ثبت...";
+    try{
+      await Auth.changePassword(curPass, newPass);
+      setMsg(msgEl, "رمز عبور با موفقیت تغییر کرد ✅", "success");
+      document.getElementById("pfPasswordForm").reset();
+    } catch(err){
+      setMsg(msgEl, err.message || "تغییر رمز ناموفق بود.", "error");
+    } finally {
+      btn.disabled = false; btn.textContent = "تغییر رمز عبور";
+    }
+  });
+
+  loadOrders();
+  loadFavorites();
+  loadWallet();
+})();
+</script>
+</body>
+</html>
