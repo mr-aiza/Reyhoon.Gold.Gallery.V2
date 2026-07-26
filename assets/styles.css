@@ -41,22 +41,7 @@ img,svg{ display:block; }
 
 .container{ max-width:1152px; margin:0 auto; padding:0 20px; }
 
-/* ===== Ticker ===== */
-.ticker-wrap{
-  background:var(--bg-card);
-  border-bottom:1px solid var(--border);
-  overflow:hidden;
-  white-space:nowrap;
-  padding:var(--sp-2) 0;
-}
-.ticker-track{ display:inline-flex; width:max-content; animation: ticker 28s linear infinite; }
-.ticker-track:hover{ animation-play-state:paused; }
-@keyframes ticker{ 0%{ transform:translateX(0); } 100%{ transform:translateX(-50%); } }
-.ticker-group{ display:flex; align-items:center; gap:40px; padding:0 var(--sp-5); }
-.ticker-item{ font-size:12px; display:flex; align-items:center; gap:var(--sp-2); color:var(--text-dim); }
-.ticker-item .val{ color:var(--cream); font-weight:500; }
-.ticker-item .unit{ font-size:10px; }
-@media (prefers-reduced-motion: reduce){ .ticker-track{ animation:none; } }
+
 
 /* ===== Header ===== */
 header{
